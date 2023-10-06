@@ -2,10 +2,12 @@
 Collection of showcase applications that I have developed over the years. 
 
 ## Partial differential equation (PDE) solvers
-Fluid flow through porous media is an important process controlling the dynamics of, e.g. subsurface reservoirs, and filtration systems. The movie below shows porous convection across a 2D domain. To calculate the fluid motion through the pore space, Darcy's equation is coupled to the Heat equation. The solution is obtained iteratively applying a pseudo-transient time stepping method.
+### Porous convection
+Porous convection is an important physical process that describes the dynamics of fluid extraction from an essentially undeforming solid in a multiphase aggregate. Applications include industrial filtration systems, subsurface hydrogeological reservoirs, or melt extraction below a volcano. The movie below shows porous convection across a 2D domain. To calculate the fluid motion through the pore space, Darcy's equation is coupled to the Heat equation. The solution is obtained iteratively applying a pseudo-transient time stepping method.
 
 | Attribute           | Value                      |
 | :------------------ | :------------------------- |
+| Physics             | Darcy's law + Heat equation|
 | Method              | central finite differences |
 | Time integration    | fully implicit             |
 | Advection scheme    | upwind (first order)       |
