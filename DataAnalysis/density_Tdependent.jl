@@ -1,6 +1,6 @@
 # Linear regression for temperature dependent density. Turns out that Flux.jl works best for values close to 1.0. It is therefore important to normalise or scale all data before training the neural network. This is done in this example.
 using Pkg
-Pkg.instantiate()
+Pkg.activate("./DataAnalysis")
 using Flux, Statistics, CairoMakie, MathTeXEngine
 
 function density_Tdependent()
@@ -84,7 +84,7 @@ function density_Tdependent()
     display(f)
 
     # Save Figure
-    save("./doc/png/density_Tdependent.png", f, px_per_unit=3)
+    save("./doc/png/linearRegression_density_Tdependent.png", f, px_per_unit=3)
 
     # Return
     return nothing

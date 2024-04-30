@@ -1,8 +1,8 @@
 # Solving 2D porous convection equation with central finite differences and fully implicit time integration
-using Pkg, CairoMakie, Printf, FFMPEG
-if isfile("Project.toml") && isfile("Manifest.toml")
-    Pkg.activate(".")
-end
+using Pkg 
+Pkg.activate("./Solvers/PorousConvection")
+using CairoMakie, Printf, FFMPEG
+
 fontsize_theme = Theme(fontsize = 25)
 set_theme!(fontsize_theme)
 # Define Function
@@ -30,8 +30,8 @@ set_theme!(fontsize_theme)
     qstp       = 4                    # Quiver density: higher values = less dense
     aspRat     = lx/ly                # Model aspect ratio
     # Misc
-    printFig   = true                # Printing switch
-    writeMov   = true                # Write movie switch
+    printFig   = false                # Printing switch
+    writeMov   = false                # Write movie switch
     figName    = "./Solvers/PorousConvection/doc/png/PC_impl_BConFlux"    # Figure name
     movName    = "./Solvers/PorousConvection/doc/PC_impl_BConFlux_mov.mov"        # Movie name
     # Derived Numerics
