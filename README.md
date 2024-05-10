@@ -19,3 +19,9 @@ Porous convection is an important physical process that describes the dynamics o
 
 https://github.com/lcandiot/DevelopersCard/assets/50524459/24bbff85-92bd-4f90-a380-bb2f09f45e02
 
+## Data Analysis
+### Fitting data using neural networks
+The following figure shows an example of fitting the temperature-dependent rock density using neural networks. The linear regression algorithm was developed using the Flux.jl package.
+
+![LinearRegression](./doc/png/linearRegression_density_Tdependent.png)
+
