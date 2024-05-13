@@ -11,7 +11,7 @@ Porous convection is an important physical process that describes the dynamics o
 | Method              | central finite differences |
 | Time integration    | fully implicit             |
 | Advection scheme    | upwind (first order)       |
-| Programmed language | Julia                      |
+| Programming language | Julia                      |
 | Parallelization     | no                         |
 | Rayleigh-No         | 1000                       |
 | Porosity            | 10 % (const.)              |
