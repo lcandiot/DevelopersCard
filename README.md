@@ -31,3 +31,10 @@ The following figure shows an example of fitting the temperature-dependent rock 
 
 ![LinearRegression](./doc/png/linearRegression_density_Tdependent.png) 
 
+## Numerical Methods
+### Newton-Raphson iterative solution procedure
+This technique allows to find the root of any function $f(x)$. Solution procedure starts by defining an initial guess ($x_n$), ideal already close to the solution. Determining the derivate $f'(x_n)$ and its root gives a new guess $x_{n+1}$ which is closer to the solution than the guess before. Repeat this procedure either until $|x_{n+1} - x_n| < \varepsilon$ or $f(x_{n+1}) \approx 0$. An advantage of the Newton-Raphson iteration is that convergence is quadratically in the vicinity of the root, reducing the computational cost. The example below shows the Newton-Raphson iterative solution procedure to find the root of $f(x) = x^2 - 2$. The derivative $f'(x_n)$ is calculated (1) analytically, (2) numerically as difference between $x_n$ and a perturbation of $x_n$ approximation, (3) via the Julia package **Zygote.jl** which enables automatic differentiation of any function. Note the scatter plot in the right panel indeed shows a quadratic convergence behaviour. 
+
+https://github.com/lcandiot/DevelopersCard/assets/50524459/f3b32855-6646-4716-81c1-adf1f37e4232
+
+This and similar methods are widely used in optimization algorithms and PDE solvers. I have also used this technique to find the liquidus temperature of geomaterials as a function of pressure and chemical composition. 
