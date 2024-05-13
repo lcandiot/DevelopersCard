@@ -14,27 +14,30 @@ using CairoMakie, QuadGK
 
     # Numerics
     nx       = 501                  # No. of grid points
-    nt       = 2000                  # No. of time steps
+    nt       = 2000                 # No. of time steps
     nEig     = 70                   # No. of Eigenvalues
-    nviz     = 100                   # Visualization increment
+    nviz     = 100                  # Visualization increment
     cfl      = 1.0 + sqrt(2.1)      # CFL criterion
     ϵtol     = 1.0e-6               # Solver tolerance
     max_iter = 1000 * nx^2          # Iteration cap
     ncheck   = 1                    # Convergence check increment
     plot_res = true                 # Residual plotting switch
+    plot_leg = true                 # Legend plotting switch
+
+    # Derived numerics
+    dx     = Lx / (nx - 1)                                  # Grid spacing [m]
 
     # Initialisation
-    dx     = Lx / (nx - 1)           # Grid spacing [m]
-    T      = Vector{Float64}(undef, nx - 1)
-    dTdt   = Vector{Float64}(undef, nx - 1)
-    qT     = Vector{Float64}(undef, nx    )
-    sumEig = Vector{Float64}(undef, nx - 1)
-    ζ_n    = Vector{Float64}(undef, nEig  )
-    x      = [0.0 - dx / 2.0 + ix * dx for ix = 1:nx-1]
-    T     .= TA .* exp.( .-( (x .- xc) / w) .^2)
+    T      = Vector{Float64}(undef, nx - 1)                 # Temperature [K]
+    dTdt   = Vector{Float64}(undef, nx - 1)                 # Temperature time derivative [K/s]
+    qT     = Vector{Float64}(undef, nx    )                 # Heat flux (W/m2)
+    sumEig = Vector{Float64}(undef, nx - 1)                 # Sum of Eigenvalues
+    ζ_n    = Vector{Float64}(undef, nEig  )                 # Eigenvalues
+    x      = [0.0 - dx / 2.0 + ix * dx for ix = 1:nx-1]     # Coordinate array
+    T     .= TA .* exp.( .-( (x .- xc) / w) .^2)            # Initial condition
     Ti     = copy(T)
-    Ta     = copy(Ti)
-    T_old  = copy(Ti)
+    Ta     = copy(Ti)                                       # Analytical T array
+    T_old  = copy(Ti)                                       # Old physical T array
     dTdt  .= 0.0
     qT    .= 0.0
 
@@ -45,7 +48,7 @@ using CairoMakie, QuadGK
     end
 
     # Visualize initial configuration
-    f     = Figure()
+    f     = Figure(fontsize = 16)
     ax1   = Axis(f[1,1], title="Temperature at time = $(time)")
     ax2   = Axis(f[2,1], yscale = log10)
     lines!(ax1, x, Ti)
@@ -53,6 +56,7 @@ using CairoMakie, QuadGK
 
     # Time loop
     for iTime = 1:nt
+        # Time stepping
         dt = if iTime == 1
             min(dx^2 / D / 2.1, dx / abs(v) / 2.1)
         else
@@ -78,17 +82,15 @@ using CairoMakie, QuadGK
                     qT[iX + 1, 1] -= (qT[iX + 1, 1] + D * (T[iX + 1, 1] - T[iX, 1]) / dx) * 1.0 / (1.0 + θ_dτ_T)
                 end
             end
-            # qT[end, 1] = 0.0# qT[end - 1, 1] # BCs
-            # qT[1  , 1] = 0.0# qT[end    , 1]
 
             # Calculate temperature change 
             for iX in eachindex(dTdt)
-                dTdt[iX, 1] = (qT[iX + 1, 1] - qT[iX, 1]) / dx             # Diffusion
+                dTdt[iX, 1] = (qT[iX + 1, 1] - qT[iX, 1]) / dx                          # Diffusion
             end
 
             for iX in eachindex(dTdt)
                 if iX > 1 && iX < nx - 1 
-                    dTdt[iX  , 1] += max(0.0, v ) * (T[iX, 1] - T[iX - 1, 1]) / dx     # Advection (upwind)
+                    dTdt[iX  , 1] += max(0.0, v ) * (T[iX, 1] - T[iX - 1, 1]) / dx      # Advection (upwind)
                     dTdt[iX-1, 1] += min(v , 0.0) * (T[iX, 1] - T[iX - 1, 1]) / dx
                 end
             end
@@ -98,7 +100,7 @@ using CairoMakie, QuadGK
                 T[iX, 1] -= 1.0 / (1.0 / dt + β_dτ_T) * ((T[iX, 1] - T_old[iX, 1]) / dt + dTdt[iX, 1])
             end
 
-            # Dirichlet BC
+            # Homogeneous Dirichlet BC
             T[[1 end], 1] .= 0.0
 
             # Check the error
@@ -116,28 +118,28 @@ using CairoMakie, QuadGK
         end
 
         # Calculate analytical solution
-        sumEig .= 0.0
+        sumEig      .= 0.0                                                                              # Reset
         for iEig in eachindex(ζ_n)
-            sumEig .+= ζ_n[iEig] .* sin.((iEig * π / Lx) .* x) .* exp(-D * (iEig * π / Lx)^2 * time)
+            sumEig .+= ζ_n[iEig] .* sin.((iEig * π / Lx) .* x) .* exp(-D * (iEig * π / Lx)^2 * time)    # Calculate sum of Eigenvalues
         end
-        Ta .= exp(-(v^2 / 4.0 / D) * time) .* exp.((v / 2.0 / D) .* x) .* sumEig
+        Ta          .= exp(-(v^2 / 4.0 / D) * time) .* exp.((v / 2.0 / D) .* x) .* sumEig               # Compute analytical solution
 
         # Visualize
         if iTime % nviz == 0
             empty!(ax1)
-            li1 = lines!(ax1, x, Ti, color=:tomato, label = "Initial")
-            li2 = lines!(ax1, x, T , color=:blue, label = "Num. solution")
-            sc1 = scatter!(ax1, x[1:10:end, 1], Ta[1:10:end, 1], color=:blue, label = "Ana. solution")
+            li1 = lines!(ax1, x, Ti, color=:purple4, linewidth = 2, label = "Initial")
+            li2 = lines!(ax1, x, T , color=:steelblue, linewidth = 2, label = "Num. solution")
+            sc1 = scatter!(ax1, x[1:15:end, 1], Ta[1:15:end, 1], color=:steelblue, markersize = 10.0, label = "Ana. solution")
             ax1.title = "Temperature at time = $(time)"
-            axislegend(ax1, position = :rt)
+            if plot_leg
+                axislegend(ax1, position = :rt)
+            end
+            plot_leg = false
             display(f)
-
         end
 
-        # Save final result
-        if iTime == nt
-            save("./doc/png/DiffusionConvection_1D_homoDirichlet.png", f, px_per_unit=3)
-        end
+        # Save results
+        save("/Users/lcandiot/Developer/DevelopersCard/doc/png/DiffusionConvection/DiffusionConvection_1D_homoDirichlet_$(iTime).png", f, px_per_unit=3)
 
         # Clear plot
         empty!(ax2)
