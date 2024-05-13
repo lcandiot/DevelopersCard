@@ -13,17 +13,18 @@ using CairoMakie, QuadGK
     TA   = 1.0              # Perturbation amplitude [K]
 
     # Numerics
-    nx       = 501                  # No. of grid points
-    nt       = 2000                 # No. of time steps
-    nEig     = 70                   # No. of Eigenvalues
-    nviz     = 100                  # Visualization increment
-    cfl      = 1.0 + sqrt(2.1)      # CFL criterion
-    ϵtol     = 1.0e-6               # Solver tolerance
-    max_iter = 1000 * nx^2          # Iteration cap
-    ncheck   = 1                    # Convergence check increment
-    plot_res = true                 # Residual plotting switch
-    plot_leg = true                 # Legend plotting switch
-
+    nx        = 501                  # No. of grid points
+    nt        = 2000                 # No. of time steps
+    nEig      = 70                   # No. of Eigenvalues
+    nviz      = 100                  # Visualization increment
+    cfl       = 1.0 + sqrt(2.1)      # CFL criterion
+    ϵtol      = 1.0e-6               # Solver tolerance
+    max_iter  = 1000 * nx^2          # Iteration cap
+    ncheck    = 1                    # Convergence check increment
+    plot_res  = true                 # Residual plotting switch
+    plot_leg  = true                 # Legend plotting switch
+    print_fig = true
+    
     # Derived numerics
     dx     = Lx / (nx - 1)                                  # Grid spacing [m]
 
@@ -49,8 +50,8 @@ using CairoMakie, QuadGK
 
     # Visualize initial configuration
     f     = Figure(fontsize = 16)
-    ax1   = Axis(f[1,1], title="Temperature at time = $(time)")
-    ax2   = Axis(f[2,1], yscale = log10)
+    ax1   = Axis(f[1,1], title="Temperature at time = $(time)", xlabel = "x [m]", ylabel = "T [K]")
+    ax2   = Axis(f[2,1], yscale = log10, xlabel = "i []", ylabel = "err []")
     lines!(ax1, x, Ti)
     display(f)
 
@@ -73,7 +74,7 @@ using CairoMakie, QuadGK
         T_old .= T
 
         # Iteration loop
-        err = 1.0; iter = 0
+        err = 1.0; iter = 0; iter_all = []; err_all = []
         while err > ϵtol && iter < max_iter
             iter += 1
             # Calculate heat flux
@@ -106,14 +107,11 @@ using CairoMakie, QuadGK
             # Check the error
             if iter % ncheck == 0
                 err = maximum(abs.(-(T[2:end-1, 1] .- T_old[2:end-1, 1]) ./ dt .- dTdt[2:end-1, 1] )) * dt / TA
+                push!(iter_all, iter)
+                push!(err_all, err)
                 println("err = $(err); iter = $(iter)")
                 println("min(T ) = $(minimum(T));  max(T ) = $(maximum(T))")
                 println("min(qT) = $(minimum(qT)); max(qT) = $(maximum(qT))")
-                if plot_res && iTime == nt
-                    scatter!(ax2, iter, err, color=:black)
-                    ax2.title = "Residual at $(iter) iterations"
-                    display(f)
-                end
             end
         end
 
@@ -135,11 +133,16 @@ using CairoMakie, QuadGK
                 axislegend(ax1, position = :rt)
             end
             plot_leg = false
+            if plot_res
+                scatter!(ax2, Float64.(iter_all), Float64.(err_all), color=:black)
+                ax2.title = "Residual at $(iter) iterations"
+            end
             display(f)
+            if print_fig
+                # Save results
+                save("/Users/lcandiot/Developer/DevelopersCard/doc/png/DiffusionConvection/DiffusionConvection_1D_homoDirichlet_$(iTime).png", f, px_per_unit=3)
+            end
         end
-
-        # Save results
-        save("/Users/lcandiot/Developer/DevelopersCard/doc/png/DiffusionConvection/DiffusionConvection_1D_homoDirichlet_$(iTime).png", f, px_per_unit=3)
 
         # Clear plot
         empty!(ax2)
