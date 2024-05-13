@@ -19,9 +19,13 @@ Porous convection is an important physical process that describes the dynamics o
 
 https://github.com/lcandiot/DevelopersCard/assets/50524459/24bbff85-92bd-4f90-a380-bb2f09f45e02
 
+### Analytical solutions
+For benchmarking purposes it is useful to compare the numerical solution to analytical solutions. For some equations it is possible to derive a solution analytically for others they do not exist. In this section, I showcase a 1D Diffusion-Convection equation for which I have derived an analytical solution assuming an initial normal (or Gaussian) distribution of a scalar quantity and homogeneous Dirichlet boundary conditions. As shown in the movie below the numerical fits the analytical solution up to an acceptable tolerance.
+
+
 ## Data Analysis
 ### Fitting data using neural networks
 The following figure shows an example of fitting the temperature-dependent rock density using neural networks. The linear regression algorithm was developed using the Flux.jl package.
 
-![LinearRegression](./doc/png/linearRegression_density_Tdependent.png)
+![LinearRegression](./doc/png/linearRegression_density_Tdependent.png) 
 
