@@ -29,7 +29,7 @@ https://github.com/lcandiot/DevelopersCard/assets/50524459/f39d5d7a-c08c-4a26-87
 ### Fitting data using neural networks
 The following figure shows an example of fitting the temperature-dependent rock density using neural networks. The linear regression algorithm was developed using the Flux.jl package.
 
-![LinearRegression](./doc/png/linearRegression_density_Tdependent.png) 
+![linearRegression_density_Tdependent](https://github.com/lcandiot/DevelopersCard/assets/50524459/4b08ad9a-981c-40b9-aa65-2f376c35a3f2)
 
 ## Numerical Methods
 ### Newton-Raphson iterative solution procedure
