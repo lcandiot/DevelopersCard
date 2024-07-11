@@ -1,49 +1,54 @@
 # Solving 2D stokes flow of an incompressible highly viscous fluid
-using CairoMakie
+using CairoMakie, Printf, ColorSchemes
+
+macro av(A)  esc(:( ($A[1:end-1, 1:end-1] .+ $A[2:end, 1:end-1] .+ $A[1:end-1, 2:end] .+ $A[2:end, 2:end]) .* 0.25 )) end
+macro av_xi(A) esc(:( ($A[1:end-1, 2:end-1] .+ $A[2:end, 2:end-1]) .* 0.5 )) end
+macro av_yi(A) esc(:( ($A[2:end-1, 1:end-1] .+ $A[2:end-1, 2:end]) .* 0.5 )) end
 
 @views function incompressible_viscous_stokes2D()
     # Real values
-    ρ_r    = 1.0
-    gy     = 1.0
-    gx     = 0.0
-    yr     = 3600.0 * 24.0 * 365.25
-    ηs_inc = 1e-3
-    Ṽ      = 6000.0
+    ρ_r      = 2800.0
+    gy       = 9.81
+    gx       = 0.0
+    sec_year = 3600.0 * 24.0 * 365.25
+    ηs_inc   = 1e20
 
     # Indepentent physics
     ρg   = ρ_r * gy
-    ε̇_bg = 1.0
-    η_bg = 1.0
+    ε̇_bg = 1e-15
+    η_bg = 1e23
 
     # Nondimensional number
     Lx_Ly = 1.0
     Lx_Lc = 10.0
 
-    # Dependent physics
-    Lc   = 1.0 / ( ρg / (η_bg * ε̇_bg) )
-    tc   = 1.0 / ε̇_bg
-    dt   = 1e-3 * tc
-    Lx   = Lc * Lx_Lc
-    Ly   = Lx / Lx_Ly
-    Lx_r = 10.0
-    ρgx  = ρ_r * gx
-
     # Dependent scales
     Psc = η_bg * ε̇_bg
-    vsc = Lc   * ε̇_bg
-    tsc = 1.0  / ε̇_bg
+    Lsc = 1.0 / ( ρg / (η_bg * ε̇_bg) )
+    tsc = 1.0 / ε̇_bg
+    vsc = Lsc / tsc
+
+    # Dependent physics
+    dt       = 1e-3 * tsc
+    Lx       = Lsc * Lx_Lc
+    Ly       = Lx / Lx_Ly
+    Lx_r     = 10.0
+    ρgx      = ρ_r * gx
+    ρgy      = ρ_r * gy
+    max_LxLy = max(Lx, Ly)
+
 
     # Numerics
-    nx, ny   = 151, 151
-    ϵ_tol    = 1e-6
-    max_iter = 1000
-    dx, dy   = Lx / (nx - 1), Ly / (ny - 1)
-    Re       = 3 * √10 / 2.0 * π
+    nx, ny   = 255, 255
+    ϵ_tol    = 1e-10
+    max_iter = 1e5
+    ncheck   = 1000
+    CFL      = 0.9 / sqrt(2.0)
+    dx, dy   = Lx / nx, Ly / ny
+    Ṽ        = min(dx,dy) * CFL
+    Re       = 3.0 * sqrt(10.0) / 2.0 * π
     r̃        = 0.5
-    ρ̃        = Re * ηs_bg / Ṽ / max(Lx, Ly)
-    G̃        = ρ̃ * Ṽ^2 / (r̃ + 2.0)
-    K̃        = r̃ * G̃
-    
+
     # Mechanics switches
     is_buoyant = 0
 
@@ -51,61 +56,117 @@ using CairoMakie
     vx     = zeros(Float64, nx + 1, ny    )
     vy     = zeros(Float64, nx    , ny + 1)
     τxx    = zeros(Float64, nx    , ny    )
+    τyy    = zeros(Float64, nx    , ny    )
     τxy    = zeros(Float64, nx - 1, ny - 1)
     Res_vx = zeros(Float64, nx - 1, ny - 2)
     Res_vy = zeros(Float64, nx - 2, ny - 1)
+    Res_p  = zeros(Float64, nx    , ny    )
+    Gdτ    = zeros(Float64, nx    , ny    )
+    dτ_ρ   = zeros(Float64, nx    , ny    )
     p      = zeros(Float64, nx    , ny    )
     ηs     = zeros(Float64, nx    , ny    ) .+ η_bg
-    x      = LinRange(0, Lx, nx)
-    y      = LinRange(0, Ly, ny)
-    xc     = Lx / 2.0
-    yc     = Ly / 2.0
+    x      = LinRange(0 + dx / 2.0, Lx - dx / 2.0, nx)
+    y      = LinRange(0 + dy / 2.0, Ly - dy / 2.0, ny)
+    xv     = LinRange(0, Lx, nx + 1)
+    yv     = LinRange(0, Ly, ny + 1)
+    x_inc  = Lx / 2.0
+    y_inc  = Ly / 2.0
     r      = Lx / Lx_r
     x2D    = reshape(repeat(x , ny), nx, ny)
     y2D    = reshape(repeat(y', nx), nx, ny)
 
+    # Boundary conditions
+    for idy in axes(vx, 2)
+        vx[:, idy] .= -ε̇_bg .* LinRange(-0.5*Lx, 0.5*Lx, nx+1)
+    end
+    for idx in axes(vy, 1)
+        vy[idx, :] .= ε̇_bg .* LinRange(-0.5*Ly, 0.5*Ly, ny+1)
+    end
+
+    # Set circular inclusion
     for idx_y in eachindex(y)
         for idx_x in eachindex(x)
-            if ( (x2D[idx_x, idx_y] - xc)^2 + (y2D[idx_x, idx_y] - yc)^2 < r^2 )
+            if ( (x2D[idx_x, idx_y] - x_inc)^2 + (y2D[idx_x, idx_y] - y_inc)^2 < r^2 )
                 ηs[idx_x, idx_y] = ηs_inc
             end
         end
     end
 
-    smooth_2DArray_diffusion(ηs, 10, dx, dy)
+    smooth_2DArray_diffusion!(ηs, 10, dx, dy)
 
     # Visualize
     fg1 = Figure(size = (600, 600))
-    ax1 = Axis(fg1[1, 1], xlabel = "x", ylabel = "y")
+    ax1 = Axis(fg1[1, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Pt")
+    ax2 = Axis(fg1[2, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vx")
+    ax3 = Axis(fg1[2, 2], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vy")
     hm1 = heatmap!(ax1, x, y, ηs)
+    hm2 = heatmap!(ax2, xv, yv, vx)
+    hm3 = heatmap!(ax3, xv, yv, vy)
     display(fg1)
 
+    # Calculate pseudo-transient params
+    dτ_ρ .= Ṽ .* max_LxLy ./ Re ./ ηs
+    Gdτ  .= Ṽ^2 ./ dτ_ρ ./ (r̃ + 2.0)
+
     # Pseudo - transient solver loop
+    max_Res_all = []; err = 2ϵ_tol
     for iter in 1:max_iter
-        
+
         # Conservation of mass - pressure update
-        Res_p = - K̃ * dτ * (diff(vx, dims = 1) / dx + diff(vy, dims = 2) / dy)
-        p   .+= dτ * Res_p
+        Res_p .= - r̃ .* Gdτ .* (diff(vx, dims = 1) ./ dx .+ diff(vy, dims = 2) ./ dy)
+        p    .+= Res_p
 
         # Constitutive equation - stress update
-        τxx   .-= 2.0 .* G̃ .* dτ .* (τxx ./ 2.0 ./ ηs .- diff(vx, dims = 1) ./ dx)
-        τyy   .-= 2.0 .* G̃ .* dτ .* (τyy ./ 2.0 ./ ηs .- diff(vy, dims = 2) ./ dy)
-        τxy   .-= 2.0 .* G̃ .* dτ .* (τxy ./ 2.0 ./ ηs .- 0.5 .* (diff(vx, dims = 2) ./ dy + diff(vy, dims = 1) ./ dx))
+        τxx   .= ( τxx .+ 2.0 .* Gdτ .* diff(vx, dims = 1) ./ dx ) ./ (Gdτ ./ ηs .+ 1.0)
+        τyy   .= ( τyy .+ 2.0 .* Gdτ .* diff(vy, dims = 2) ./ dy ) ./ (Gdτ ./ ηs .+ 1.0)
+        τxy   .= ( τxy .+ 2.0 .* @av(Gdτ) .* (0.5 .* (diff(vx[2:end-1,:], dims = 2) ./ dy + diff(vy[:, 2:end-1], dims = 1) ./ dx)) ) ./ (@av(Gdτ) ./ @av(ηs) .+ 1.0)
 
         # Conservation of linear momentum - velocity update
-        Res_vx .= - 1.0 ./ ρ̃ .* ( diff(p, dims = 1) / dx - diff(τxx, dims = 1) / dx - diff(τxy, dims = 2) / dy) + Float64(is_buoyant) * ρgx 
-        Res_vy .= - 1.0 ./ ρ̃ .* ( diff(p, dims = 2) / dy - diff(τyy, dims = 2) / dy - diff(τxy, dims = 1) / dx) + Float64(is_buoyant) * ρgy
-        vx[2:end-1, 2:end-1]    .+= dτ .* Res_vx 
-        vy[2:end-1, 2:end-1]    .+= dτ .* Res_vy 
+        Res_vx .= @av_xi(dτ_ρ) .* ( diff(τxx[:, 2:end-1], dims = 1) ./ dx .+ diff(τxy, dims = 2) ./ dy .- diff(p[:, 2:end-1], dims = 1) ./ dx ) 
+        Res_vy .= @av_yi(dτ_ρ) .* ( diff(τyy[2:end-1, :], dims = 2) ./ dy .+ diff(τxy, dims = 1) ./ dx .- diff(p[2:end-1, :], dims = 2) ./ dy )
+        vx[2:end-1, 2:end-1]    .+= Res_vx
+        vy[2:end-1, 2:end-1]    .+= Res_vy
 
+        # Boundary conditions
+        vx[:,   1] .= vx[:,       2]
+        vx[:, end] .= vx[:, end - 1]
+        vy[1,   :] .= vy[2,       :]
+        vy[end, :] .= vy[end - 1, :]
+
+        # Monitor residuals 
+        if iter % ncheck == 0
+            @printf("\n")
+            @printf("Iteration = %d \n", iter)
+            @printf("Residual p  = %.2e \n", maximum(Res_p ) / Psc)
+            @printf("Residual vx = %.2e \n", maximum(Res_vx) / vsc)
+            @printf("Residual vy = %.2e \n", maximum(Res_vy) / vsc)
+            err = maximum([maximum(Res_p ) / Psc maximum(Res_vx) / vsc maximum(Res_vy) / vsc])
+        end
+
+        if err < ϵ_tol
+            break
+        end
     end
+
+    # Visualize
+    empty!(ax1)
+    empty!(ax2)
+    empty!(ax3)
+    hm1 = heatmap!(ax1, x, y, p, colormap = :viridis)
+    hm2 = heatmap!(ax2, xv, yv, vx, colormap = :roma)
+    hm3 = heatmap!(ax3, xv, yv, vy, colormap = :roma)
+
+    Colorbar(fg1[1,2][1,1], hm1, label = "P [Pa]")
+    Colorbar(fg1[1,2][1,2], hm2, label = "Vx [m.s⁻¹]")
+
+    display(fg1)
 
     # Return
     return nothing
 end
 
 # Diffuse array
-function smooth_2DArray_diffusion(A :: Matrix{Float64}, nsteps :: Int64, dx :: Float64, dy :: Float64)
+function smooth_2DArray_diffusion!(A :: Matrix{Float64}, nsteps :: Int64, dx :: Float64, dy :: Float64)
     for _ in 1:nsteps
         A[2:end-1, 2:end-1] .+= (min.(dx.^2, dy.^2) ./ 1.0 ./ 4.1) .* ( diff( 1.0 .* diff(A[:, 2:end-1], dims = 1), dims = 1) ./ dx^2 + diff(1.0 .* diff(A[2:end-1, :], dims = 2), dims = 2) ./ dy^2)
     end
