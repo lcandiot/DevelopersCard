@@ -14,19 +14,19 @@ macro av_yi(A) esc(:( ($A[2:end-1, 1:end-1] .+ $A[2:end-1, 2:end]) .* 0.5 )) end
     ηs_inc   = 1e20
 
     # Indepentent physics
-    ρg   = ρ_r * gy
-    ε̇_bg = 1e-15
-    η_bg = 1e23
+    ρg       = ρ_r * gy
+    ε̇_bg     = 1e-15
+    η_bg     = 1e23
 
     # Nondimensional number
-    Lx_Ly = 1.0
-    Lx_Lc = 10.0
+    Lx_Ly    = 1.0
+    Lx_Lc    = 10.0
 
     # Dependent scales
-    Psc = η_bg * ε̇_bg
-    Lsc = 1.0 / ( ρg / (η_bg * ε̇_bg) )
-    tsc = 1.0 / ε̇_bg
-    vsc = Lsc / tsc
+    Psc      = η_bg * ε̇_bg
+    Lsc      = 1.0 / ( ρg / (η_bg * ε̇_bg) )
+    tsc      = 1.0 / ε̇_bg
+    vsc      = Lsc / tsc
 
     # Dependent physics
     dt       = 1e-3 * tsc
@@ -53,27 +53,27 @@ macro av_yi(A) esc(:( ($A[2:end-1, 1:end-1] .+ $A[2:end-1, 2:end]) .* 0.5 )) end
     is_buoyant = 0
 
     # Initialization
-    vx     = zeros(Float64, nx + 1, ny    )
-    vy     = zeros(Float64, nx    , ny + 1)
-    τxx    = zeros(Float64, nx    , ny    )
-    τyy    = zeros(Float64, nx    , ny    )
-    τxy    = zeros(Float64, nx - 1, ny - 1)
-    Res_vx = zeros(Float64, nx - 1, ny - 2)
-    Res_vy = zeros(Float64, nx - 2, ny - 1)
-    Res_p  = zeros(Float64, nx    , ny    )
-    Gdτ    = zeros(Float64, nx    , ny    )
-    dτ_ρ   = zeros(Float64, nx    , ny    )
-    p      = zeros(Float64, nx    , ny    )
-    ηs     = zeros(Float64, nx    , ny    ) .+ η_bg
-    x      = LinRange(0 + dx / 2.0, Lx - dx / 2.0, nx)
-    y      = LinRange(0 + dy / 2.0, Ly - dy / 2.0, ny)
-    xv     = LinRange(0, Lx, nx + 1)
-    yv     = LinRange(0, Ly, ny + 1)
-    x_inc  = Lx / 2.0
-    y_inc  = Ly / 2.0
-    r      = Lx / Lx_r
-    x2D    = reshape(repeat(x , ny), nx, ny)
-    y2D    = reshape(repeat(y', nx), nx, ny)
+    vx       = zeros(Float64, nx + 1, ny    )
+    vy       = zeros(Float64, nx    , ny + 1)
+    τxx      = zeros(Float64, nx    , ny    )
+    τyy      = zeros(Float64, nx    , ny    )
+    τxy      = zeros(Float64, nx - 1, ny - 1)
+    Res_vx   = zeros(Float64, nx - 1, ny - 2)
+    Res_vy   = zeros(Float64, nx - 2, ny - 1)
+    Res_p    = zeros(Float64, nx    , ny    )
+    Gdτ      = zeros(Float64, nx    , ny    )
+    dτ_ρ     = zeros(Float64, nx    , ny    )
+    p        = zeros(Float64, nx    , ny    )
+    ηs       = zeros(Float64, nx    , ny    ) .+ η_bg
+    x        = LinRange(0 + dx / 2.0, Lx - dx / 2.0, nx)
+    y        = LinRange(0 + dy / 2.0, Ly - dy / 2.0, ny)
+    xv       = LinRange(0, Lx, nx + 1)
+    yv       = LinRange(0, Ly, ny + 1)
+    x_inc    = Lx / 2.0
+    y_inc    = Ly / 2.0
+    r        = Lx / Lx_r
+    x2D      = reshape(repeat(x , ny), nx, ny)
+    y2D      = reshape(repeat(y', nx), nx, ny)
 
     # Boundary conditions
     for idy in axes(vx, 2)
@@ -95,13 +95,13 @@ macro av_yi(A) esc(:( ($A[2:end-1, 1:end-1] .+ $A[2:end-1, 2:end]) .* 0.5 )) end
     smooth_2DArray_diffusion!(ηs, 10, dx, dy)
 
     # Visualize
-    fg1 = Figure(size = (600, 600))
-    ax1 = Axis(fg1[1, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Pt")
-    ax2 = Axis(fg1[2, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vx")
-    ax3 = Axis(fg1[2, 2], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vy")
-    hm1 = heatmap!(ax1, x, y, ηs)
-    hm2 = heatmap!(ax2, xv, yv, vx)
-    hm3 = heatmap!(ax3, xv, yv, vy)
+    fg1   = Figure(size = (600, 600))
+    ax1   = Axis(fg1[1, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Pt")
+    ax2   = Axis(fg1[2, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vx")
+    ax3   = Axis(fg1[2, 2], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vy")
+    hm1   = heatmap!(ax1, x, y, ηs)
+    hm2   = heatmap!(ax2, xv, yv, vx)
+    hm3   = heatmap!(ax3, xv, yv, vy)
     display(fg1)
 
     # Calculate pseudo-transient params
