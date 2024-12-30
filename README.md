@@ -3,8 +3,23 @@ Collection of showcase applications that I have developed over the years.
 
 🚧 This repository is under constant development 🚧
 
+## Ordinary differential equations (ODE) solvers in Julia
+### The damped harmonic oscillator
+A classical physical example of an ODE is the damped harmonic oscillator. Consider the following equation that describes the motion of a damped spring
+```math
+  m \frac{d^2x}{dt^2} = -kx -c\frac{dx}{dt}.
+```
+This equation can be rewritten in the following way
+```math
+  \frac{d^2x}{dt^2} + \omega^2 x + 2\zeta \omega \frac{dx}{dt} = 0 ,
+```
+where $$\omega = \sqrt{k/m}$$ and $$\zeta = c / 2 / \sqrt{mk}$$, and solved to using the Julia package [DifferentialEquations.jl](https://docs.sciml.ai/DiffEqDocs/stable/).
+The movie below shows the results obtained by the script [dampedHarmonicOscillator.jl](https://github.com/lcandiot/DevelopersCard/blob/main/Solvers/ODEs/dampedHarmonicOscillator.jl)
+
+![](./Solvers/ODEs/png/dampedHarmonicOscillator/dampedHarmonicOscillator.mov)
+
 ## Partial differential equation (PDE) solvers
-### Porous convection
+### Hydrothermal fluid flow
 Porous convection is an important physical process that describes the dynamics of fluid extraction from an essentially undeforming solid in a multiphase aggregate. Applications include industrial filtration systems, subsurface hydrogeological reservoirs, or melt extraction below a volcano. The movie below shows porous convection across a 2D domain. To calculate the fluid motion through the pore space, Darcy's equation is coupled to the Heat equation. The solution is obtained iteratively applying a pseudo-transient time stepping method.
 
 | Attribute           | Value                      |
