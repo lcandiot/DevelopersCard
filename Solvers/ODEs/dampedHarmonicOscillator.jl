@@ -33,7 +33,7 @@ function main_dampedHarmonicOscillator(; save_png :: Bool = false)
     t   = [sol.t[i]    for i in eachindex(sol.t)]
 
     # Visualize result
-    fig = Figure(size = (300, 300))
+    fig = Figure(size = (600, 600))
     ax1 = Axis(fig[1,1], xlabel = L"$t$ [s]", ylabel = L"$x$ [m]", limits = (tspan[1], tspan[2], -max(x₀[1], dxdt[1]), max(x₀[1], dxdt[1])))
     for idx in eachindex(sol.t)
         pl1 = lines!(ax1, t[1:idx],  x[1:idx], color = :steelblue4, label = L"x")
@@ -46,7 +46,7 @@ function main_dampedHarmonicOscillator(; save_png :: Bool = false)
         display(fig)
         if save_png
             fname = @sprintf "./png/dampedHarmonicOscillator/dhOscillator_%03d.png" idx
-            save(fname, fig, px_per_unit = 2)
+            save(fname, fig, px_per_unit = 4)
         end
     end
 
