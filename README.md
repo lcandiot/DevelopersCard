@@ -19,7 +19,7 @@ The movie below shows the results obtained by the script [dampedHarmonicOscillat
 ![](./Solvers/ODEs/png/dampedHarmonicOscillator/dampedHarmonicOscillator.mov)
 
 ## Partial differential equation (PDE) solvers
-### Porous convection
+### Hydrothermal fluid flow
 Porous convection is an important physical process that describes the dynamics of fluid extraction from an essentially undeforming solid in a multiphase aggregate. Applications include industrial filtration systems, subsurface hydrogeological reservoirs, or melt extraction below a volcano. The movie below shows porous convection across a 2D domain. To calculate the fluid motion through the pore space, Darcy's equation is coupled to the Heat equation. The solution is obtained iteratively applying a pseudo-transient time stepping method.
 
 | Attribute           | Value                      |
