@@ -1,0 +1,15 @@
+name = "MyChmySolvers"
+uuid = "2ef6712c-e604-4d16-886f-ccf2cdc80f3c"
+authors = ["Lorenzo Candioti <lorenzo.candioti@bluewin.ch>"]
+version = "0.1.0"
+
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Chmy = "33a72cf0-4690-46d7-b987-06506c2248b9"
+Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
+LinearOperators = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
+Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
+TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
