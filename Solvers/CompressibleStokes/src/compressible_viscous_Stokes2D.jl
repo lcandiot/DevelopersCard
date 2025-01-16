@@ -1,4 +1,4 @@
-# Solving 2D stokes flow of an incompressible highly viscous fluid
+# Solving 2D stokes flow of a compressible highly viscous fluid
 using CairoMakie, Printf, ColorSchemes
 
 macro av(A)  esc(:( ($A[1:end-1, 1:end-1] .+ $A[2:end, 1:end-1] .+ $A[1:end-1, 2:end] .+ $A[2:end, 2:end]) .* 0.25 )) end
@@ -9,15 +9,15 @@ macro av_ya(A) esc(:( ($A[:,       1:end-1] .+ $A[:,         2:end]) .* 0.5 )) e
 macro ex_x(A)  esc(:( vcat($A[1, :]', $A) |> B -> vcat(B, $A[end, :]'))) end
 macro ex_y(A)  esc(:( hcat($A[:, 1], $A) |> B -> hcat(B, $A[:, end]))) end
 
-@views function incompressible_viscous_stokes2D()
+@views function compressible_viscous_stokes2D()
     # Real values
     ρ_r      = 2800.0                   # Density [kg.m⁻³]
     gy       = 9.81                     # Grav. acc. y [m.s⁻²]
     gx       = 0.0                      # Grav. acc. x [m.s⁻²]
     sec_year = 3600.0 * 24.0 * 365.25   # Seconds in a year
     ηs_inc   = 1e21                     # Viscosity of the inclusion [Pa.s]
-    K_r      = 1e9                     # Bulk modulus [Pa]
-    K_inc    = 1e11                     # Bulk modulus [Pa]
+    K_r      = 1e11                     # Bulk modulus [Pa]
+    K_inc    = 1e9                     # Bulk modulus [Pa]
     p0       = 101300.0                 # Reference pressure [Pa]
 
     # Indepentent physics
@@ -47,7 +47,7 @@ macro ex_y(A)  esc(:( hcat($A[:, 1], $A) |> B -> hcat(B, $A[:, end]))) end
 
     # Numerics
     nx, ny   = 155, 155                 # Resolution
-    nt       = 10                      # No. time steps
+    nt       = 1                      # No. time steps
     ϵ_tol    = 1e-10                    # Absolute residual tolerance
     max_iter = 1e5                      # Maximum no. of iteration
     ncheck   = 10000                     # Error check frequency
@@ -108,8 +108,10 @@ macro ex_y(A)  esc(:( hcat($A[:, 1], $A) |> B -> hcat(B, $A[:, end]))) end
 
     smooth_2DArray_diffusion!(ηs, 10, dx, dy)
 
+    ηs_ini = deepcopy(ηs)
+
     # Visualize
-    fg1   = Figure(size = (600, 600))
+    fg1   = Figure(size = (1600, 1600))
     ax1   = Axis(fg1[1, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Pt")
     ax2   = Axis(fg1[2, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vx")
     ax3   = Axis(fg1[2, 2], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vy")
@@ -118,7 +120,7 @@ macro ex_y(A)  esc(:( hcat($A[:, 1], $A) |> B -> hcat(B, $A[:, end]))) end
     hm2   = heatmap!(ax2, xv, yv, vx)
     hm3   = heatmap!(ax3, xv, yv, vy)
     hm4   = heatmap!(ax4, x, y, ρ)
-    display(fg1)
+    # display(fg1)
 
     # Time loop
     time = 0.0
@@ -189,7 +191,8 @@ macro ex_y(A)  esc(:( hcat($A[:, 1], $A) |> B -> hcat(B, $A[:, end]))) end
         hm1 = heatmap!(ax1, x, y, p, colormap = :viridis)
         hm2 = heatmap!(ax2, xv, yv, vx, colormap = :roma)
         hm3 = heatmap!(ax3, xv, yv, vy, colormap = :roma)
-        hm4 = heatmap!(ax4, x, y, ρ, colormap = :roma)
+        hm4 = contourf!(ax4, x, y, ρ, colormap = :roma)
+        # ct1 = contour!(ax4, x, y, ηs_ini)
 
         Colorbar(fg1[1,2][1,1], hm1, label = "P [Pa]")
         Colorbar(fg1[1,2][1,2], hm2, label = "Vx [m.s⁻¹]")
@@ -213,5 +216,5 @@ function smooth_2DArray_diffusion!(A :: Matrix{Float64}, nsteps :: Int64, dx :: 
 end
 
 # Run main
-incompressible_viscous_stokes2D()
+compressible_viscous_stokes2D()
 
