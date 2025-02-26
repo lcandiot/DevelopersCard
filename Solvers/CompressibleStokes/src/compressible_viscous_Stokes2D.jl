@@ -152,8 +152,8 @@ macro ex_y(A)  esc(:( hcat($A[:, 1], $A) |> B -> hcat(B, $A[:, end]))) end
             p    .+= Res_p
 
             # Constitutive equation - stress update
-            τxx   .= ( τxx .+ 2.0 .* Gdτ .* (diff(vx, dims = 1) ./ dx .- 0.3 .* (diff(vx, dims = 1) ./ dx + diff(vy, dims = 2) ./ dy)) ) ./ (Gdτ ./ ηs .+ 1.0)
-            τyy   .= ( τyy .+ 2.0 .* Gdτ .* (diff(vy, dims = 2) ./ dy .- 0.3 .* (diff(vx, dims = 1) ./ dx + diff(vy, dims = 2) ./ dy)) ) ./ (Gdτ ./ ηs .+ 1.0)
+            τxx   .= ( τxx .+ 2.0 .* Gdτ .* (diff(vx, dims = 1) ./ dx .- 1.0./3.0 .* ∇v) ) ./ (Gdτ ./ ηs .+ 1.0)
+            τyy   .= ( τyy .+ 2.0 .* Gdτ .* (diff(vy, dims = 2) ./ dy .- 1.0./3.0 .* ∇v) ) ./ (Gdτ ./ ηs .+ 1.0)
             τxy   .= ( τxy .+ 2.0 .* @av(Gdτ) .* (0.5 .* (diff(vx[2:end-1,:], dims = 2) ./ dy + diff(vy[:, 2:end-1], dims = 1) ./ dx)) ) ./ (@av(Gdτ) ./ @av(ηs) .+ 1.0)
 
             # Conservation of linear momentum - velocity update
