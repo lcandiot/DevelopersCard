@@ -1,5 +1,6 @@
 # Solving 2D stokes flow of an incompressible viscoelastic fluid putting the building blocks into functions for speeding things up
 using CairoMakie, Printf, ColorSchemes
+using Random
 
 macro av_arr(A)    esc(:( ($A[1:end-1, 1:end-1] .+ $A[2:end, 1:end-1] .+ $A[1:end-1, 2:end] .+ $A[2:end, 2:end]) .* 0.25 )) end
 macro av_xi_arr(A) esc(:( ($A[1:end-1, 2:end-1] .+ $A[2:end, 2:end-1]) .* 0.5 )) end
@@ -20,15 +21,19 @@ macro av_ya(A) esc(:( ($A[idx, idy] + $A[idx, idy + 1]) * 0.5 )) end
 macro av_xi(A) esc(:( ($A[idx, idy + 1] + $A[idx + 1, idy + 1]) * 0.5 )) end
 macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
 
-@views function incompressible_viscoelastic_stokes2D()
+@views function compressible_EVP_stokes2D()
+
     # Real values
     ρ_r      = 2800.0
     gy       = 9.81
     gx       = 0.0
     sec_year = 3600.0 * 24.0 * 365.25
-    ηs_inc   = 1e20
+    ηs_inc   = 1e23
     G_r      = 1e10
     K_r      = 1e11
+    φ_r      = 30.0
+    ψ_r      = 15.0
+    C_r      = 1e7
     p0       = 101300.0
     ρ0       = 2800.0
 
@@ -40,6 +45,11 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
     # Nondimensional number
     Lx_Ly    = 1.0
     Lx_Lc    = 10.0
+
+    # Randomness
+    seed = 123
+    rng  = Random.MersenneTwister()
+    Random.seed!(rng, seed)
 
     # Dependent scales
     Psc      = η_bg * ε̇_bg
@@ -94,6 +104,9 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
     ∇v       = zeros(Float64, nx    , ny    )
     ηs       = zeros(Float64, nx    , ny    ) .+ η_bg
     ηve      = zeros(Float64, nx    , ny    )
+    λ̇        = zeros(Float64, nx    , ny    )
+    Q        = zeros(Float64, nx    , ny    )
+    C        = rand(rng, nx, ny) .* C_r
     ρ        = zeros(Float64, nx    , ny    ) .+ ρ_r
     G        = zeros(Float64, nx    , ny    ) .+ G_r
     K        = zeros(Float64, nx    , ny    ) .+ K_r
@@ -134,17 +147,24 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
     smooth_2DArray_diffusion!(ηs, 10, dx, dy)
 
     # Visualize
-    fg1   = Figure(size = (1600, 1600))
-    ax1   = Axis(fg1[1, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Pt")
-    ax2   = Axis(fg1[2, 1], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vx")
-    ax3   = Axis(fg1[2, 2], xlabel = "x", ylabel = "y", aspect = DataAspect(), title = "Vy")
-    ax4   = Axis(fg1[1, 2], xlabel = "x", ylabel = "y", title = "ρ")
-    ax5   = Axis(fg1[3, 1], xlabel = "nt", ylabel = "τII", title = "Stress build up")
-    ax6   = Axis(fg1[3, 2], xlabel = "nt", ylabel = "τII", title = "∇v")
-    # hm1   = heatmap!(ax1, xc, yc, ηs)
-    # hm2   = heatmap!(ax2, xv, yv, vx)
-    # hm3   = heatmap!(ax3, xv, yv, vy)
-    # display(fg1)
+    fg1  = Figure(size = (1600, 1600), fontsize = 24.0)
+    ax1  = Axis(fg1[1, 1][1, 1], xlabel = "x",  ylabel = "y",   aspect = DataAspect(), title = "Pt")
+    ax2  = Axis(fg1[2, 1][1, 1], xlabel = "x",  ylabel = "y",   aspect = DataAspect(), title = "Vx")
+    ax3  = Axis(fg1[2, 2][1, 1], xlabel = "x",  ylabel = "y",   aspect = DataAspect(), title = "Vy")
+    ax4  = Axis(fg1[1, 2][1, 1], xlabel = "x",  ylabel = "y",   aspect = DataAspect(), title = "ρ")
+    ax5  = Axis(fg1[3, 1][1, 1], xlabel = "nt", ylabel = "τII", aspect = 1.0,          title = "Stress build up")
+    ax6  = Axis(fg1[3, 2][1, 1], xlabel = "x",   ylabel = "y",  aspect = DataAspect(), title = "C")
+    hm1  = heatmap!(ax1, xc, yc, p, colormap = :viridis)
+    hm2  = heatmap!(ax2, xv, yv, vx, colormap = :roma)
+    hm3  = heatmap!(ax3, xv, yv, vy, colormap = :roma)
+    hm4  = heatmap!(ax4, xv, yv, ρ, colormap = :bilbao)
+    hm6  = heatmap!(ax6, xv, yv, C, colormap = :acton)
+    cbP  = Colorbar(fg1[1,1][1,2], hm1)
+    cbVx = Colorbar(fg1[2,1][1,2], hm2)
+    cbVy = Colorbar(fg1[2,2][1,2], hm3)
+    cbρ  = Colorbar(fg1[1,2][1,2], hm4)
+    cbC  = Colorbar(fg1[3,2][1,2], hm6)
+    display(fg1)
 
     # TIME LOOP
     time = 0.0; τII_max_time = []; ntimes = []
@@ -217,22 +237,18 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
         push!(τII_max_time, maximum(τII))
         push!(ntimes, idx_Time)
 
-        # Visualize
-        empty!(ax1)
-        empty!(ax2)
-        empty!(ax3)
-        empty!(ax4)
-        empty!(ax5)
-        empty!(ax6)
-        hm1 = heatmap!(ax1, xc, yc, p, colormap = :viridis)
-        hm2 = heatmap!(ax2, xv, yv, vx, colormap = :roma)
-        hm3 = heatmap!(ax3, xv, yv, vy, colormap = :roma)
-        hm4 = heatmap!(ax4, xv, yv, ρ, colormap = :roma)
+        # Update plots
+        hm1[3].val .= p
+        hm2[3].val .= vx
+        hm3[3].val .= vy
+        hm4[3].val .= ρ
+        hm6[3].val .= C
         ln  = scatter!(ax5, ntimes, τII_max_time, color = :black)
-        hm4 = heatmap!(ax6, xc, yc, ∇v, colormap = :roma)
-        # Colorbar(fg1[1,2][1,1], hm1, label = "P [Pa]")
-        # Colorbar(fg1[1,2][1,2], hm2, label = "Vx [m.s⁻¹]")
-    
+        cbP.colorrange  = (minimum(p ), maximum(p))
+        cbVx.colorrange = (minimum(vx), maximum(vx))
+        cbVy.colorrange = (minimum(vy), maximum(vy))
+        cbρ.colorrange  = (minimum(ρ ), maximum(ρ ))
+        cbC.colorrange  = (minimum(C ), maximum(C ))
         display(fg1)
     end
 
@@ -321,7 +337,7 @@ function compute_viscoelastic_rheology!(
     # Viscoelastic rheology
     for idy in 1:ny
         for idx in 1:nx
-            ηve[idx, idy] = 1.0 / (1.0 / (G[idx, idy] * dt) + 1.0 / (ηs[idx, idy]))
+            ηve[idx, idy] = 1.0 / (1.0 / (G[idx, idy] * dt))
         end
     end
 
@@ -665,4 +681,4 @@ end
 # --------------------- #
 #|      Run main       |#
 # --------------------- #
-incompressible_viscoelastic_stokes2D()
+compressible_EVP_stokes2D();
