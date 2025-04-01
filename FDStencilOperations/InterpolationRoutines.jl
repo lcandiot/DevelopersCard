@@ -62,7 +62,6 @@ function c2v(
     wSE  :: Matrix{Float64}
 )
     # Get sizes
-    ncx, ncy = size(Ac)
     nvx, nvy = size(Av)
 
     # Interpolate
@@ -104,7 +103,7 @@ end
 function main()
 
     # Initialize sizes
-    ncx, ncy = 60, 60
+    ncx, ncy = 6, 6
     nvx, nvy = ncx+1, ncy+1
 
     # Initialize Arrays

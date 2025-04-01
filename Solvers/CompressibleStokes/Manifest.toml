@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.2"
+julia_version = "1.11.4"
 manifest_format = "2.0"
-project_hash = "baf267129e157ffaa53efa59ad44c59f084846fb"
+project_hash = "f5ff81477597cbf231fdeb3b7441be1c96b6ca21"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -116,6 +116,17 @@ deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jl
 git-tree-sha1 = "009060c9a6168704143100f36ab08f06c2af4642"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.18.2+1"
+
+[[deps.CellArrays]]
+deps = ["Adapt", "StaticArrays"]
+git-tree-sha1 = "1bcf80738f25294289ccd08bb9060681e0913b57"
+uuid = "d35fcfd7-7af4-4c67-b1aa-d78070614af4"
+version = "0.3.1"
+
+    [deps.CellArrays.weakdeps]
+    AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra"]
@@ -865,7 +876,7 @@ version = "3.2.4+0"
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
-version = "0.8.1+2"
+version = "0.8.1+4"
 
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -924,6 +935,25 @@ deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "FriBidi_jl
 git-tree-sha1 = "3b31172c032a1def20c98dae3f2cdc9d10e3b561"
 uuid = "36c8627f-9965-5494-a995-c6b170f724f3"
 version = "1.56.1+0"
+
+[[deps.ParallelStencil]]
+deps = ["CellArrays", "MacroTools", "Random", "StaticArrays"]
+git-tree-sha1 = "4fa8ad666e623621db93a37f0155708022781dac"
+uuid = "94395366-693c-11ea-3b26-d9b7aac5d958"
+version = "0.14.1"
+
+    [deps.ParallelStencil.extensions]
+    ParallelStencil_AMDGPUExt = "AMDGPU"
+    ParallelStencil_CUDAExt = "CUDA"
+    ParallelStencil_EnzymeExt = "Enzyme"
+    ParallelStencil_MetalExt = "Metal"
+
+    [deps.ParallelStencil.weakdeps]
+    AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+    Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+    Polyester = "f517fe37-dbe3-4b94-8317-1923a5111588"
 
 [[deps.Parsers]]
 deps = ["Dates", "PrecompileTools", "UUIDs"]

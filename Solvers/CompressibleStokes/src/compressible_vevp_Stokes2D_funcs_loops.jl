@@ -62,11 +62,11 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
     max_LxLy = max(Lx, Ly)
 
     # Numerics
-    nx, ny   = 155, 155
+    nx, ny   = 102, 102
     nt       = 15
     ϵ_tol    = 1e-8
     max_iter = 1e5
-    ncheck   = 100
+    ncheck   = 1000
     CFL      = 0.9 / sqrt(2.0) / 10.0
     dx, dy   = Lx / nx, Ly / ny
     _dx, _dy = 1.0 / dx, 1.0 / dy
@@ -79,10 +79,18 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
     is_buoyant = 0
 
     # Initialization
+    AvNW     = zeros(Float64, nx + 1, ny + 1)
+    AvNE     = zeros(Float64, nx + 1, ny + 1)
+    AvSW     = zeros(Float64, nx + 1, ny + 1)
+    AvSE     = zeros(Float64, nx + 1, ny + 1)
+    wNW      =  ones(Float64, nx + 1, ny + 1)
+    wNE      =  ones(Float64, nx + 1, ny + 1)
+    wSW      =  ones(Float64, nx + 1, ny + 1)
+    wSE      =  ones(Float64, nx + 1, ny + 1)
     vx       = zeros(Float64, nx + 1, ny + 2)
     vy       = zeros(Float64, nx + 2, ny + 1)
-    τxx      = zeros(Float64, nx    , ny    ) .- 0.5.*pconf
-    τyy      = zeros(Float64, nx    , ny    ) .+ 0.5.*pconf
+    τxx      = zeros(Float64, nx    , ny    )
+    τyy      = zeros(Float64, nx    , ny    )
     τzz      = zeros(Float64, nx    , ny    )
     τxy      = zeros(Float64, nx    , ny    )
     τxyv     = zeros(Float64, nx + 1, ny + 1)
@@ -106,19 +114,25 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
     ωxyv     = zeros(Float64, nx + 1, ny + 1)
     ωyx      = zeros(Float64, nx    , ny    )
     ωyxv     = zeros(Float64, nx + 1, ny + 1)
-    Res_vx   = zeros(Float64, nx - 1, ny - 2)
-    Res_vy   = zeros(Float64, nx - 2, ny - 1)
+    dvxdτ    = zeros(Float64, nx - 1, ny    )
+    dvydτ    = zeros(Float64, nx    , ny - 1)
+    Res_vx   = zeros(Float64, nx - 1, ny    )
+    Res_vy   = zeros(Float64, nx    , ny - 1)
     Res_p    = zeros(Float64, nx    , ny    )
+    dpdτ     = zeros(Float64, nx    , ny    )
     G̃dτ      = zeros(Float64, nx    , ny    )
+    G̃dτv     = zeros(Float64, nx + 1, ny + 1)
     dτ_ρ     = zeros(Float64, nx    , ny    )
     p        = zeros(Float64, nx    , ny    ) .+ pconf
     pcorr    = zeros(Float64, nx    , ny    )
     ∇v       = zeros(Float64, nx    , ny    )
     ηs       = zeros(Float64, nx    , ny    ) .+ η_bg
     ηve      = zeros(Float64, nx    , ny    )
+    ηvev     = zeros(Float64, nx + 1, ny + 1)
     ηvep     = zeros(Float64, nx    , ny    )
     ρ        = zeros(Float64, nx    , ny    ) .+ ρ_r
     G        = zeros(Float64, nx    , ny    ) .+ G_r
+    Gv       = zeros(Float64, nx + 1, ny + 1) .+ G_r
     K        = zeros(Float64, nx    , ny    ) .+ K_r
     H        = zeros(Float64, nx    , ny    ) .+ H_r
     C        = zeros(Float64, nx    , ny    ) .+ C_r
@@ -149,6 +163,7 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
     τxx_old  = deepcopy(τxx)
     τyy_old  = deepcopy(τyy)
     τxy_old  = deepcopy(τxy)
+    τxyv_old = deepcopy(τxyv)
     p_old    = deepcopy(p  )
 
     # Boundary conditions
@@ -170,6 +185,9 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
 
     # Smooth out the inclusion
     smooth_2DArray_diffusion!(ηs, 10, dx, dy)
+
+    # Set weights
+    set_weigths!(wNW, wNE, wSW, wSE)
 
     # Visualize
     fg1   = Figure(size = (1600, 1600))
@@ -196,36 +214,53 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
         @printf("\ndt = %.5e\n", dt)
 
         # Update old physical fields
-        τxx_old .= τxx
-        τyy_old .= τyy
-        τxy_old .= τxy
-        p_old   .= p
+        τxx_old  .= τxx
+        τyy_old  .= τyy
+        τxyv_old .= τxyv
+        τxy_old  .= @av_arr(τxyv)
+        p_old    .= p
 
         # Pseudo - transient solver loop
         max_Res_all = []; err = 2ϵ_tol
-        compute_viscoelastic_rheology!(ηve, ηs, G, dt)
+        # compute_viscoelastic_rheology!(ηve, ηs, G, dt)
         for iter in 1:max_iter
             
             # λ̇_old .= λ̇rel
             compute_viscoelastic_rheology!(ηve, ηs, G, dt)
             compute_pseudotransient_parameters!(ηve, dτ_ρ, G̃dτ, Ṽ, max_LxLy, Re, r̃)
+            c2v(G̃dτ, G̃dτv, AvNW, AvNE, AvSW, AvSE, wNW, wNE, wSW, wSE)
+            c2v(ηve, ηvev, AvNW, AvNE, AvSW, AvSE, wNW, wNE, wSW, wSE)
             compute_divergence_vs!(∇v, vx, vy, _dx, _dy)
-            compute_pressure_residual!(∇v, Res_p, p, p_old, K, G̃dτ, dt, r̃)
-            update_pressure!(p, Res_p)
-            compute_vorticity!(ωxx, ωyy, ωxy, ωyx, vx, vy, _dx, _dy)
+            
+            compute_pressure_change!(∇v, dpdτ, p, p_old, K, G̃dτ, dt, r̃)
+            update_pressure!(p, dpdτ)
+            
+            compute_vorticity!(ωxx, ωyy, ωxyv, ωyxv, vx, vy, _dx, _dy)
+            # v2c(τxyv, τxy)
+            # v2c(ωxyv, ωxy)
+            # v2c(ωyxv, ωyx)
             compute_Jaumann_derivative!(Jxx, Jyy, Jxy, ωxx, ωyy, ωxy, ωyx, τxx, τyy, τxy, τxx_old, τyy_old, τxy_old, vx, vy, dt, _dx, _dy)
+            c2v(Jxy, Jxyv, AvNW, AvNE, AvSW, AvSE, wNW, wNE, wSW, wSE)
+            c2v(G̃dτ, G̃dτv, AvNW, AvNE, AvSW, AvSE, wNW, wNE, wSW, wSE)
+            c2v(ηve, ηvev, AvNW, AvNE, AvSW, AvSE, wNW, wNE, wSW, wSE)
             # compute_2ndInv(τII, τxx, τyy, τzz, τxy)
-            # @printf "min(τxx ) = %.2e \t max(τxx ) = %.2e\n" minimum(τxx) maximum(τxx)
             # @printf "min(τII ) = %.2e \t max(τII ) = %.2e\n" minimum(τII) maximum(τII)
-            update_stresses!(τxx, τyy, τzz, τxy, ε̇xx, ε̇yy, ε̇zz, ε̇xy, Jxx, Jyy, Jzz, Jxy, ∇v, vx, vy, ηve, G, G̃dτ, _dx, _dy)
-            compute_2ndInv(τII, τxx, τyy, τzz, τxy)
-            compute_velocity_residual!(τxx, τyy, τxy, p, Res_vx, Res_vy, dτ_ρ, _dx, _dy)
-            update_velocity!(vx, vy, Res_vx, Res_vy)
-            compute_strainrates(ε̇xx, ε̇yy, ε̇zz, ε̇xy, vx, vy, ∇v, _dx, _dy)
+            compute_strainrates(ε̇xx, ε̇yy, ε̇zz, ε̇xyv, vx, vy, ∇v, _dx, _dy)
+            v2c(ε̇xyv, ε̇xy)
+            # @printf "min(ε̇xyv) = %.2e \t max(ε̇xyv) = %.2e\n" minimum(ε̇xyv) maximum(ε̇xyv)
+            # @printf "min(ε̇xy ) = %.2e \t max(ε̇xy ) = %.2e\n" minimum(ε̇xy) maximum(ε̇xy)
+            update_stresses!(τxx, τyy, τzz, τxyv, ε̇xx, ε̇yy, ε̇zz, ε̇xyv, Jxx, Jyy, Jzz, Jxyv, ∇v, vx, vy, ηve, ηvev, G, Gv, G̃dτ, G̃dτv, _dx, _dy)
+            # compute_shearstress_vertices!(τxyv, ε̇xyv, ηvev)
+            # v2c(τxyv, τxy)
+            # c2v(τxy, τxyv, AvNW, AvNE, AvSW, AvSE, wNW, wNE, wSW, wSE)
+            compute_2ndInv(τII, τxx, τyy, τzz, τxyv)
+            compute_velocity_change!(τxx, τyy, τxyv, p, dvxdτ, dvydτ, dτ_ρ, _dx, _dy)
+            update_velocity!(vx, vy, dvxdτ, dvydτ)
+
             # @printf "min(τxx ) = %.2e \t max(τxx ) = %.2e\n" minimum(τxx) maximum(τxx)
             # @printf "min(τII ) = %.2e \t max(τII ) = %.2e\n" minimum(τII) maximum(τII)
 
-            compute_2ndInv(ε̇II, ε̇xx, ε̇yy, ε̇zz, ε̇xy)
+            compute_2ndInv(ε̇II, ε̇xx, ε̇yy, ε̇zz, ε̇xyv)
             # check_yield_1(τII, p, C, F, sinφ, cosφ)
             # compute_plastic_flow_potential(Pla, F, H, K, ηve, sinφ, sinψ, cosφ, τII, τxx, τyy, τzz, τxy, λ̇, λ̇rel, λ̇_old, ∂Q∂τxx, ∂Q∂τyy,∂Q∂τzz, ∂Q∂τxy, ηvp, dt, rel)
             # correct_stress_pressure(K, τxx, τyy, τzz, τxy, ηve, ε̇xx, ε̇yy, ε̇zz, ε̇xy, λ̇rel, ∂Q∂τxx, ∂Q∂τyy, ∂Q∂τzz, ∂Q∂τxy, sinψ, pcorr, p, H, C, C0, dt)
@@ -247,13 +282,17 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
             # Boundary conditions
             set_BC_velocity!(vx, vy, Lx, Ly, ε̇_bg, "ε̇_bg const.")
 
+            # Residuals
+            compute_pressure_residual!(p, p_old, K, ∇v, Res_p, dt)
+            compute_velocity_residual!(τxx, τyy, τxyv, p, Res_vx, Res_vy, _dx, _dy)
+
             # Monitor residuals 
             if iter % ncheck == 0
                 @printf("\n")
                 @printf("Iteration = %d \n", iter)
-                @printf("Residual p  = %.2e \n", maximum(Res_p ) / Psc)
-                @printf("Residual vx = %.2e \n", maximum(Res_vx) / vsc)
-                @printf("Residual vy = %.2e \n", maximum(Res_vy) / vsc)
+                @printf("Residual p  = %.2e \n", maximum(Res_p ) * dt)
+                @printf("Residual vx = %.2e \n", maximum(Res_vx) / Psc * Lsc)
+                @printf("Residual vy = %.2e \n", maximum(Res_vy) / Psc * Lsc)
                 @printf("Physics:\n")
                 @printf("min(vx) = %.2e; max(vx) = %.2e; min(vy) = %.2e; max(vy) = %.2e\n", minimum(vx), maximum(vx), minimum(vy), maximum(vy))
                 @printf "min(ηvep) = %.2e \t max(ηvep) = %.2e\n" minimum(ηvp) maximum(ηvp)
@@ -263,7 +302,7 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
                 @printf "min(τyy ) = %.2e \t max(τyy ) = %.2e\n" minimum(τyy) maximum(τyy)
                 @printf "min(τzz ) = %.2e \t max(τzz ) = %.2e\n" minimum(τzz) maximum(τzz)
                 @printf "min(τxy ) = %.2e \t max(τxy ) = %.2e\n" minimum(τxy) maximum(τxy)
-                err = maximum([maximum(Res_p ) / Psc maximum(Res_vx) / vsc maximum(Res_vy) / vsc])
+                err = maximum([maximum(Res_p ) * dt maximum(Res_vx) / Psc * Lsc maximum(Res_vy) / Psc * Lsc])
             end
 
             if err < ϵ_tol
@@ -302,8 +341,7 @@ end
 #|  Compute functions  |#
 # --------------------- #
 
-# Set weighting coefficients
-function set_weigths(
+function set_weigths!(
     wNW :: Matrix{Float64},
     wNE :: Matrix{Float64},
     wSW :: Matrix{Float64},
@@ -364,7 +402,6 @@ function c2v(
     wSE  :: Matrix{Float64}
 )
     # Get sizes
-    ncx, ncy = size(Ac)
     nvx, nvy = size(Av)
 
     # Interpolate
@@ -389,7 +426,6 @@ function v2c(
 )
     # Get sizes
     ncx, ncy = size(Ac)
-    nvx, nvy = size(Av)
     
     # Interpolate
     for idy in 1:ncy
@@ -422,15 +458,21 @@ end
 
 # Compute sqrt of 2nd tensor invariant
 @views function compute_2ndInv(
-    τII :: Matrix{Float64},
-    τxx :: Matrix{Float64},
-    τyy :: Matrix{Float64},
-    τzz :: Matrix{Float64},
-    τxy :: Matrix{Float64},
+    TII  :: Matrix{Float64},
+    Txx  :: Matrix{Float64},
+    Tyy  :: Matrix{Float64},
+    Tzz  :: Matrix{Float64},
+    Txyv :: Matrix{Float64},
 )
-    τII[2:end-1, 2:end-1] = @. sqrt(0.5 * (τxx[2:end-1, 2:end-1]^2 + τyy[2:end-1, 2:end-1]^2 + τzz[2:end-1, 2:end-1]^2 + 2.0 * @av_arr(τxy)^2))
-    τII[[1, end], :] .= τII[[2, end-1], :]
-    τII[:, [1, end]] .= τII[:, [2, end-1]]
+    # Get size
+    nx, ny = size(TII)
+
+    # Compute sqrt of 2nd invariant
+    for idy in 1:ny
+        for idx in 1:nx
+            TII[idx, idy] = sqrt( 0.5 * (Txx[idx, idy]^2 + Tyy[idx, idy]^2 + Tzz[idx, idy]^2 + 2.0 * @av(Txyv)^2))
+        end
+    end
 end
 
 # Divergence
@@ -447,7 +489,7 @@ function compute_divergence_vs!(
     # Calculate divergence of solid velocity
     for idy in 1:ny
         for idx in 1:nx
-            ∇v[idx, idy] = @d_dx(vx) * _dx + @d_dy(vy) * _dy
+            ∇v[idx, idy] = @d_dxi(vx) * _dx + @d_dyi(vy) * _dy
         end
     end
 
@@ -681,9 +723,9 @@ function compute_pseudotransient_parameters!(
 end
 
 # Conservation of mass
-function compute_pressure_residual!(
+function compute_pressure_change!(
     ∇v    :: Matrix{Float64},
-    Res_p :: Matrix{Float64},
+    dpdτ :: Matrix{Float64},
     p     :: Matrix{Float64},
     p_old :: Matrix{Float64},
     K     :: Matrix{Float64},
@@ -692,12 +734,12 @@ function compute_pressure_residual!(
     r̃     :: Float64
 )
     # Get sizes
-    nx, ny = size(Res_p)
+    nx, ny = size(dpdτ)
 
     # Pressure residual
     for idy in 1:ny
         for idx in 1:nx
-            Res_p[idx, idy] = - r̃ * G̃dτ[idx, idy] * (∇v[idx, idy] + 1.0 / K[idx, idy] * (p[idx, idy] - p_old[idx, idy]) / dt)
+            dpdτ[idx, idy] = - r̃ * G̃dτ[idx, idy] * (∇v[idx, idy] + 1.0 / K[idx, idy] * (p[idx, idy] - p_old[idx, idy]) / dt)
         end
     end
 
@@ -706,10 +748,30 @@ function compute_pressure_residual!(
 
 end
 
+# Pressure residual
+function compute_pressure_residual!(
+    p     :: Matrix{Float64},
+    p_old :: Matrix{Float64},
+    K     :: Matrix{Float64},
+    ∇v    :: Matrix{Float64},
+    Res_p :: Matrix{Float64},
+    dt    :: Float64
+)
+    # Get size
+    nx, ny = size(p)
+
+    # Compute residual
+    for idy in 1:ny
+        for idx in 1:nx
+            Res_p[idx, idy] = -∇v[idx, idy] - 1.0 / (K[idx, idy] * dt) * (p[idx, idy] - p_old[idx, idy])
+        end
+    end
+end
+
 # Pressure
 function update_pressure!(
-    p     :: Matrix{Float64},
-    Res_p :: Matrix{Float64}
+    p    :: Matrix{Float64},
+    dpdτ :: Matrix{Float64}
 )
     # Get sizes
     nx, ny = size(p)
@@ -717,7 +779,7 @@ function update_pressure!(
     # Update pressure
     for idy in 1:ny
         for idx in 1:nx
-            p[idx, idy] += Res_p[idx, idy]
+            p[idx, idy] += dpdτ[idx, idy]
         end
     end
 
@@ -727,12 +789,12 @@ end
 
 # Vorticity
 function compute_vorticity!(
-    ωxx :: Matrix{Float64},
-    ωyy :: Matrix{Float64},
-    ωxy :: Matrix{Float64},
-    ωyx :: Matrix{Float64},
-    vx  :: Matrix{Float64},
-    vy  :: Matrix{Float64},
+    ωxx  :: Matrix{Float64},
+    ωyy  :: Matrix{Float64},
+    ωxyv :: Matrix{Float64},
+    ωyxv :: Matrix{Float64},
+    vx   :: Matrix{Float64},
+    vy   :: Matrix{Float64},
     _dx  :: Float64,
     _dy  :: Float64
 )
@@ -742,30 +804,21 @@ function compute_vorticity!(
     # Normal components
     for idy in 1:ny
         for idx in 1:nx
-            ωxx[idx, idy] = 0.5 * (@d_dx(vx) * _dx - @d_dx(vx) * _dx)
-            ωyy[idx, idy] = 0.5 * (@d_dy(vy) * _dy - @d_dy(vy) * _dy)
+            ωxx[idx, idy] = 0.5 * (@d_dxi(vx) * _dx - @d_dxi(vx) * _dx)
+            ωyy[idx, idy] = 0.5 * (@d_dyi(vy) * _dy - @d_dyi(vy) * _dy)
         end
     end
 
     # Shear components
-    for idy in 1:ny - 1
-        for idx in 1:nx - 1
-            ωxy[idx, idy] = 0.0
-            ωyx[idx, idy] = 0.0
-            if idy > 1 && idy < ny
-                ωxy[idx, idy] += 0.5 * (@d_dx(vy) * _dx)
-                ωyx[idx, idy] -= 0.5 * (@d_dx(vy) * _dx)
-            end
-            if idx > 1 && idx < nx
-                ωxy[idx, idy] -= 0.5 * (@d_dy(vx) * _dy)
-                ωyx[idx, idy] += 0.5 * (@d_dy(vx) * _dy)
-            end
+    for idy in 1:ny + 1
+        for idx in 1:nx + 1
+            ωxyv[idx, idy] = 0.5 * (@d_dx(vy) * _dx - @d_dy(vx) * _dy)
+            ωyxv[idx, idy] = 0.5 * (@d_dy(vx) * _dy - @d_dx(vy) * _dx)
         end
     end
 
     # Return
     return nothing
-
 end
 
 # Jaumann derivative
@@ -799,6 +852,7 @@ function compute_Jaumann_derivative!(
             # Old values
             Jxx[idx, idy] = -τxx_old[idx, idy] / dt
             Jyy[idx, idy] = -τyy_old[idx, idy] / dt
+            Jxy[idx, idy] = -τxy_old[idx, idy] / dt
 
             # Advection
             if idx > 1 && idx < nx && idy > 1 && idy < ny
@@ -806,46 +860,50 @@ function compute_Jaumann_derivative!(
                 Jyy[idx, idy] += max(0.0, vx[idx, idy]) * @d_dx(τyy) * _dx
                 Jxx[idx, idy] += max(0.0, vy[idx, idy]) * @d_dy(τxx) * _dy
                 Jyy[idx, idy] += max(0.0, vy[idx, idy]) * @d_dy(τyy) * _dy
+                Jxy[idx, idy] += max(0.0, vx[idx, idy]) * @d_dx(τxy) * _dx
+                Jxy[idx, idy] += max(0.0, vy[idx, idy]) * @d_dy(τxy) * _dy
             end
             if idx < nx && idy < ny
                 Jxx[idx, idy] += min(vx[idx, idy], 0.0) * @d_dx(τxx) * _dx
                 Jyy[idx, idy] += min(vx[idx, idy], 0.0) * @d_dx(τyy) * _dx
                 Jxx[idx, idy] += min(vy[idx, idy], 0.0) * @d_dy(τxx) * _dy
                 Jyy[idx, idy] += min(vy[idx, idy], 0.0) * @d_dy(τyy) * _dy
+                Jxy[idx, idy] += min(vx[idx, idy], 0.0) * @d_dx(τxy) * _dx
+                Jxy[idx, idy] += min(vy[idx, idy], 0.0) * @d_dy(τxy) * _dy
             end
 
             # Rotation
             Jxx[idx, idy] -= 2.0 * ωxx[idx, idy] * τxx[idx, idy]
             Jyy[idx, idy] -= 2.0 * ωyy[idx, idy] * τyy[idx, idy]
-            if idx > 1 && idx < nx && idy > 1 && idy < ny
-                Jxx[idx, idy] -= @av_i(ωxy) * @av_i(τxy) + @av_i(ωxy) * @av_i(τxy)
-                Jyy[idx, idy] -= @av_i(ωyx) * @av_i(τxy) + @av_i(ωyx) * @av_i(τxy)
-            end
+            Jxx[idx, idy] -= ωxy[idx, idy] * τxy[idx, idy] + ωxy[idx, idy] * τxy[idx, idy]
+            Jyy[idx, idy] -= ωyx[idx, idy] * τxy[idx, idy] + ωyx[idx, idy] * τxy[idx, idy]
+            Jxy[idx, idy] -= ωxx[idx, idy] * τxy[idx, idy] + ωyx[idx, idy] * τxx[idx, idy]
+            Jxy[idx, idy] -= ωxy[idx, idy] * τyy[idx, idy] + ωyy[idx, idy] * τxy[idx, idy]
         end
     end
 
-    # Shear component
-    for idy in 1:ny - 1
-        for idx in 1:nx - 1
+    # # Shear component
+    # for idy in 1:ny
+    #     for idx in 1:nx
 
-            # Old values
-            Jxy[idx, idy] = -τxy_old[idx, idy] / dt
+    #         # Old values
+    #         Jxy[idx, idy] = -τxy_old[idx, idy] / dt
 
-            # Advection
-            if idx > 1 && idx < nx - 1 && idy > 1 && idy < ny - 1
-                Jxy[idx, idy] += max(0.0, @av(vx)) * @d_dx(τxy) * _dx
-                Jxy[idx, idy] += max(0.0, @av(vy)) * @d_dy(τxy) * _dy
-            end
-            if idx < nx - 1 && idy < ny - 1
-                Jxy[idx, idy] += min(@av(vx), 0.0) * @d_dx(τxy) * _dx
-                Jxy[idx, idy] += min(@av(vy), 0.0) * @d_dy(τxy) * _dy
-            end
+    #         # Advection
+    #         if idx > 1 && idx < nx - 1 && idy > 1 && idy < ny - 1
+    #             Jxy[idx, idy] += max(0.0, @av(vx)) * @d_dx(τxy) * _dx
+    #             Jxy[idx, idy] += max(0.0, @av(vy)) * @d_dy(τxy) * _dy
+    #         end
+    #         if idx < nx - 1 && idy < ny - 1
+    #             Jxy[idx, idy] += min(@av(vx), 0.0) * @d_dx(τxy) * _dx
+    #             Jxy[idx, idy] += min(@av(vy), 0.0) * @d_dy(τxy) * _dy
+    #         end
 
-            # Rotation
-            Jxy[idx, idy] -= @av(ωxx) * τxy[idx, idy] + ωyx[idx, idy] .* @av(τxx)
-            Jxy[idx, idy] -= ωxy[idx, idy] * @av(τyy) + @av(ωyy) * τxy[idx, idy]
-        end
-    end
+    #         # Rotation
+    #         Jxy[idx, idy] -= @av(ωxx) * τxy[idx, idy] + ωyx[idx, idy] .* @av(τxx)
+    #         Jxy[idx, idy] -= ωxy[idx, idy] * @av(τyy) + @av(ωyy) * τxy[idx, idy]
+    #     end
+    # end
 
     # Return
     return nothing
@@ -854,15 +912,15 @@ end
 
 # Strain rates
 function compute_strainrates(
-    ε̇xx :: Matrix{Float64},
-    ε̇yy :: Matrix{Float64},
-    ε̇zz :: Matrix{Float64},
-    ε̇xy :: Matrix{Float64},
-    vx  :: Matrix{Float64},
-    vy  :: Matrix{Float64},
-    ∇v  :: Matrix{Float64},
-    _dx :: Float64,
-    _dy :: Float64
+    ε̇xx  :: Matrix{Float64},
+    ε̇yy  :: Matrix{Float64},
+    ε̇zz  :: Matrix{Float64},
+    ε̇xyv :: Matrix{Float64},
+    vx   :: Matrix{Float64},
+    vy   :: Matrix{Float64},
+    ∇v   :: Matrix{Float64},
+    _dx  :: Float64,
+    _dy  :: Float64
 )
     # Get sizes
     nx, ny = size(ε̇xx)
@@ -870,16 +928,16 @@ function compute_strainrates(
     # Normal components
     for idy in 1:ny
         for idx in 1:nx
-            ε̇xx[idx, idy] = @d_dx(vx) * _dx - ∇v[idx, idy] / 3.0
-            ε̇yy[idx, idy] = @d_dy(vy) * _dy - ∇v[idx, idy] / 3.0
-            ε̇zz[idx, idy] =                 - ∇v[idx, idy] / 3.0
+            ε̇xx[idx, idy] = @d_dxi(vx) * _dx - ∇v[idx, idy] / 3.0
+            ε̇yy[idx, idy] = @d_dyi(vy) * _dy - ∇v[idx, idy] / 3.0
+            ε̇zz[idx, idy] =                  - ∇v[idx, idy] / 3.0
         end
     end
 
     # Shear component
-    for idy in 1:ny-1
-        for idx in 1:nx-1
-            ε̇xy[idx, idy] = 0.5 * (@d_dxi(vy) * _dx + @d_dyi(vx) * _dy)
+    for idy in 1:ny+1
+        for idx in 1:nx+1
+            ε̇xyv[idx, idy] = 0.5 * (@d_dx(vy) * _dx + @d_dy(vx) * _dy)
         end
     end
 end
@@ -889,21 +947,24 @@ function update_stresses!(
     τxx :: Matrix{Float64},
     τyy :: Matrix{Float64},
     τzz :: Matrix{Float64},
-    τxy :: Matrix{Float64},
+    τxyv :: Matrix{Float64},
     ε̇xx :: Matrix{Float64},
     ε̇yy :: Matrix{Float64},
     ε̇zz :: Matrix{Float64},
-    ε̇xy :: Matrix{Float64},
+    ε̇xyv :: Matrix{Float64},
     Jxx :: Matrix{Float64},
     Jyy :: Matrix{Float64},
     Jzz :: Matrix{Float64},
-    Jxy :: Matrix{Float64},
+    Jxyv :: Matrix{Float64},
     ∇v  :: Matrix{Float64},
     vx  :: Matrix{Float64},
     vy  :: Matrix{Float64},
     ηve :: Matrix{Float64},
+    ηvev:: Matrix{Float64},
     G   :: Matrix{Float64},
+    Gv  :: Matrix{Float64},
     G̃dτ :: Matrix{Float64},
+    G̃dτv:: Matrix{Float64},
     _dx :: Float64,
     _dy :: Float64
 )
@@ -913,79 +974,141 @@ function update_stresses!(
     # Normal components
     for idy in 1:ny
         for idx in 1:nx
-            τxx[idx, idy] = ( τxx[idx, idy] + 2.0 * G̃dτ[idx, idy] * ( -1.0 / (2.0 * G[idx, idy]) * Jxx[idx, idy] + @d_dx(vx) * _dx - 1.0/3.0 * ∇v[idx, idy]) ) / (G̃dτ[idx, idy] / ηve[idx, idy] + 1.0)
-            τyy[idx, idy] = ( τyy[idx, idy] + 2.0 * G̃dτ[idx, idy] * ( -1.0 / (2.0 * G[idx, idy]) * Jyy[idx, idy] + @d_dy(vy) * _dy - 1.0/3.0 * ∇v[idx, idy]) ) / (G̃dτ[idx, idy] / ηve[idx, idy] + 1.0)
-            τzz[idx, idy] = ( τyy[idx, idy] + 2.0 * G̃dτ[idx, idy] * ( -1.0 / (2.0 * G[idx, idy]) * Jzz[idx, idy] - 1.0/3.0 * ∇v[idx, idy]) ) / (G̃dτ[idx, idy] / ηve[idx, idy] + 1.0)
+            τxx[idx, idy] = ( τxx[idx, idy] + 2.0 * G̃dτ[idx, idy] * ( -1.0 / (2.0 * G[idx, idy]) * Jxx[idx, idy] + ε̇xx[idx, idy]) ) / (G̃dτ[idx, idy] / ηve[idx, idy] + 1.0)
+            τyy[idx, idy] = ( τyy[idx, idy] + 2.0 * G̃dτ[idx, idy] * ( -1.0 / (2.0 * G[idx, idy]) * Jyy[idx, idy] + ε̇yy[idx, idy]) ) / (G̃dτ[idx, idy] / ηve[idx, idy] + 1.0)
+            # τzz[idx, idy] = ( τyy[idx, idy] + 2.0 * G̃dτ[idx, idy] * ( -1.0 / (2.0 * G[idx, idy]) * Jzz[idx, idy] - 1.0/3.0 * ∇v[idx, idy]) ) / (G̃dτ[idx, idy] / ηve[idx, idy] + 1.0)
         end
     end
 
     # Shear component
-    for idy in 1:ny - 1
-        for idx in 1:nx - 1
-            τxy[idx, idy] = ( τxy[idx, idy] + 2.0 * @av(G̃dτ) * ( -1.0 / (2.0 * @av(G)) * Jxy[idx, idy] + 0.5 * (@d_dyi(vx) * _dy + @d_dxi(vy) * _dx)) ) / (@av(G̃dτ) / @av(ηve) + 1.0)
+    for idy in 1:ny+1
+        for idx in 1:nx+1
+            τxyv[idx, idy] = ( τxyv[idx, idy] + 2.0 * G̃dτv[idx, idy] * ( -1.0 / (2.0 * Gv[idx, idy]) * Jxyv[idx, idy] + ε̇xyv[idx, idy]) ) / (G̃dτv[idx, idy] / ηvev[idx, idy] + 1.0)
         end
     end
 
     # Return
     return nothing
+end
 
+# Shear stress on vertices
+function compute_shearstress_vertices!(
+    τxyv :: Matrix{Float64},
+    ε̇xyv :: Matrix{Float64},
+    ηvev :: Matrix{Float64}
+)
+    # Get size
+    nxv, nyv = size(τxyv)
+
+    # Compute
+    for idy in 1:nyv
+        for idx in 1:nxv
+            τxyv[idx, idy] = 2.0 * ηvev[idx, idy] * ε̇xyv[idx, idy]
+        end
+    end
+
+    # Return
+    return
 end
 
 # Conservation of linear momentum
-function compute_velocity_residual!(
+function compute_velocity_change!(
     τxx    :: Matrix{Float64},
     τyy    :: Matrix{Float64},
-    τxy    :: Matrix{Float64},
+    τxyv   :: Matrix{Float64},
     p      :: Matrix{Float64},
-    Res_vx :: Matrix{Float64},
-    Res_vy :: Matrix{Float64},
+    dvxdτ  :: Matrix{Float64},
+    dvydτ  :: Matrix{Float64},
     dτ_ρ   :: Matrix{Float64},
-    _dx     :: Float64,
-    _dy     :: Float64
+    _dx    :: Float64,
+    _dy    :: Float64
 )
     # Get sizes
     nx , ny = size(p)
 
     # Velocity residual
-    for idy in 1:ny - 1
-        for idx in 1:nx - 1
-            if idy < ny - 1
-                Res_vx[idx, idy] = @av_xi(dτ_ρ) * ( @d_dxi(τxx) * _dx + @d_dy(τxy) * _dy - @d_dxi(p) * _dx )
-            end
-            if idx < nx - 1
-                Res_vy[idx, idy] = @av_yi(dτ_ρ) * ( @d_dyi(τyy) * _dy + @d_dx(τxy) * _dx - @d_dyi(p) * _dy )
+    for idy in 1:ny
+        for idx in 1:nx
+            if idx < nx
+                dvxdτ[idx, idy] = @av_xa(dτ_ρ) * ( @d_dx(τxx) * _dx + @d_dyi(τxyv) * _dy - @d_dx(p) * _dx )
             end
         end
     end
-
+    for idy in 1:ny
+        for idx in 1:nx
+            if idy < ny
+                dvydτ[idx, idy] = @av_ya(dτ_ρ) * ( @d_dy(τyy) * _dy + @d_dxi(τxyv) * _dx - @d_dy(p) * _dy )
+            end
+        end
+    end
     # Return
     return nothing
 
 end
+
+# Velocity residual
+function compute_velocity_residual!(
+    τxx    :: Matrix{Float64},
+    τyy    :: Matrix{Float64},
+    τxyv   :: Matrix{Float64},
+    p      :: Matrix{Float64},
+    Res_vx :: Matrix{Float64},
+    Res_vy :: Matrix{Float64},
+    _dx     :: Float64,
+    _dy     :: Float64
+)
+    # Get size
+    nx, ny = size(p)
+
+    # Compute residual
+    for idy in 1:ny
+        for idx in 1:nx
+            if idx < nx
+                Res_vx[idx, idy] = @d_dx(τxx) * _dx + @d_dyi(τxyv) * _dy - @d_dx(p) * _dx
+            end
+        end
+    end
+    for idy in 1:ny
+        for idx in 1:nx
+            if idy < ny
+                Res_vy[idx, idy] = @d_dy(τyy) * _dy + @d_dxi(τxyv) * _dx - @d_dy(p) * _dy
+            end
+        end
+    end
+    # Return
+    return nothing
+end
+
 function update_velocity!(
     vx     :: Matrix{Float64},
     vy     :: Matrix{Float64},
-    Res_vx :: Matrix{Float64},
-    Res_vy :: Matrix{Float64}
+    dvxdτ  :: Matrix{Float64},
+    dvydτ  :: Matrix{Float64}
 )
     # Get sizes
-    nx, ny = size(vx)[1] - 1, size(vx)[2]
+    nx_vx, ny_vx = size(vx)[1], size(vx)[2]
+    nx_vy, ny_vy = size(vy)[1], size(vy)[2]
 
+    # @printf "nx_vx = %d \t ny_vx = %d \t nx_vy = %d \t ny_vy = %d\n" nx_vx nx_vy nx_vy ny_vy
+    # error("Hello...")
     # Update velocity
-    for idy in 1:ny-1
-        for idx in 1:nx-1
-            if idy < ny - 1
-                vx[idx + 1, idy + 1] += Res_vx[idx, idy]
+    for idy in 1:ny_vx
+        for idx in 1:nx_vx
+            if idx < nx_vx-1 && idy < ny_vx-1
+                vx[idx + 1, idy + 1] += dvxdτ[idx, idy]
             end
-            if idx < nx - 1
-                vy[idx + 1, idy + 1] += Res_vy[idx, idy]
+         end
+    end
+    for idy in 1:ny_vy
+        for idx in 1:nx_vy
+            if idy < ny_vy-1 && idx < nx_vy-1
+                vy[idx + 1, idy + 1] += dvydτ[idx, idy]
             end
-        end
+         end
     end
 
     # Return
     return nothing
-
 end
 
 # Boundary conditions
@@ -998,33 +1121,21 @@ function set_BC_velocity!(
     BCtype :: String
 )
     # Get sizes
-    nx, ny = size(vx)[1] - 1, size(vx)[2]
+    nx, ny = size(vx)[1]-1, size(vy)[2]-1
 
     # Velocity in x
-    for idy in 1:ny
-        for _ in 1:nx + 1
-             # Constant background strain rate
-            if BCtype == "ε̇_bg const."
-                vx[1,      idy] =  0.5 * Lx * ε̇_bg
-                vx[nx + 1, idy] = -0.5 * Lx * ε̇_bg
-            end
-        end
-    end
+    # vx[1   , 2:end-1] .=  0.5 * Lx * ε̇_bg
+    # vx[nx+1, 2:end-1] .= -0.5 * Lx * ε̇_bg
 
-    # Velocity in y
-    for _ in 1:ny + 1
-        for idx in 1:nx
-            # Constant background strain rate
-            if BCtype == "ε̇_bg const."
-                vy[idx,      1] = -0.5 * Ly * ε̇_bg
-                vy[idx, ny + 1] =  0.5 * Ly * ε̇_bg
-            end
-        end
-    end
+    # # Velocity in y
+    # vy[2:end-1,    1] .= -0.5 * Ly * ε̇_bg
+    # vy[2:end-1, ny+1] .=  0.5 * Ly * ε̇_bg
+
+    # vx[:, [1, end]] .= vx[:, [2, end-1]]
+    # vy[[1, end], :] .= vy[[2, end-1], :]
 
     # Return
     return nothing
-
 end
 
 # --------------------- #
