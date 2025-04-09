@@ -1,2 +1,3 @@
-/png/Stokes2D_vevp/*.png
-/.DS_Store
+png/Stokes2D_vevp/*.png
+.DS_Store
+/png/.DS_Store
