@@ -230,13 +230,13 @@ end
 
     # Numerics
     ncx  = 101
-    nt   = 500
+    nt   = 1_000
     dx   = Lx / ncx
     _dx  = 1.0 / dx
-    CFL  = 0.1
+    CFL  = 0.4
     dt_d = dx^2 / k  / 2.1
     dt_a = dx   / abs(vx) / 2.1
-    dt   = 0.4 * dt_a # CFL * min(dt_d, dt_a)
+    dt   = CFL * min(dt_d, dt_a)
     nviz = 10
 
     # Initialize
