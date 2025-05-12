@@ -2,7 +2,7 @@
 using CairoMakie, MathTeXEngine
 
 # Set constants
-const ϵ = 1e-5
+const ϵ = 1e-10
 const DatType = Float64
 
 # Compute functions
@@ -87,7 +87,7 @@ function advect_WENOZ!(
     q      :: Matrix{DatType},
     f      :: Vector{DatType},
     w      :: Matrix{DatType},
-    vx     :: DatType,
+    vx     :: Matrix{DatType},
     _dx    :: DatType
 )
 
@@ -120,7 +120,7 @@ function advect_WENOZ!(
         w[1, :] .= (α ./ sum(α))
 
         # Add to advective term
-        qTa[idx_x] += max(0.0, vx) * (w * q)[1]
+        qTa[idx_x] += max(0.0, vx[idx_x + 3, 1]) * (w * q)[1]
 
         # Right-biased stencil - negative flow direction
         f[1], f[2], f[3], f[4], f[5] = T[idx_x + 5], T[idx_x + 4], T[idx_x + 3], T[idx_x + 2], T[idx_x + 1]
@@ -145,7 +145,7 @@ function advect_WENOZ!(
         w[1, :] .= (α ./ sum(α))
 
         # Add to advective term
-        qTa[idx_x] += min(vx, 0.0) * (w * q)[1]
+        qTa[idx_x] += min(vx[idx_x + 3, 1], 0.0) * (w * q)[1]
     end
     
     for idx_x in axes(∂T∂t_a, 1)
@@ -168,7 +168,7 @@ function advect_WENOZ_plus!(
     q      :: Matrix{DatType},
     f      :: Vector{DatType},
     w      :: Matrix{DatType},
-    vx     :: DatType,
+    vx     :: Matrix{DatType},
     _dx    :: DatType,
     λ      :: DatType
 )
@@ -201,7 +201,7 @@ function advect_WENOZ_plus!(
         w[1, :] .= (α ./ sum(α))
 
         # Add to advective term
-        qTa[idx_x] += max(0.0, vx) * (w * q)[1]
+        qTa[idx_x] += max(0.0, vx[idx_x + 3, 1]) * (w * q)[1]
 
         # Right-biased stencil - negative flow direction
         f[1], f[2], f[3], f[4], f[5] = T[idx_x + 5], T[idx_x + 4], T[idx_x + 3], T[idx_x + 2], T[idx_x + 1]
@@ -226,7 +226,7 @@ function advect_WENOZ_plus!(
         w[1, :] .= (α ./ sum(α))
 
         # Add to advective term
-        qTa[idx_x] += min(vx, 0.0) * (w * q)[1]
+        qTa[idx_x] += min(vx[idx_x + 3, 1], 0.0) * (w * q)[1]
     end
 
     for idx_x in axes(∂T∂t_a, 1)
@@ -302,7 +302,7 @@ end
     k    = 1.0
     Tmax = 1.0
     σh   = 0.5
-    vx   = -1.0
+    Vx   = -1.0
 
     # Numerics
     ncx  = 101
@@ -311,12 +311,13 @@ end
     _dx  = 1.0 / dx
     CFL  = 0.4
     dt_d = dx^2 / k  / 2.1
-    dt_a = dx   / abs(vx) / 2.1
+    dt_a = dx   / abs(Vx) / 2.1
     dt   = CFL * min(dt_d, dt_a)
     nviz = 10
 
     # Initialize
     xc                       = collect(LinRange((-Lx+dx)/2.0, (Lx-dx)/2.0, ncx))
+    vx                       = ones(DatType, ncx + 7, 1) .* Vx
     T_ini                    = zeros(DatType, ncx + 2, 1)
     T_ini[2:end-1, :]       .= @. Tmax * exp(-((xc + Lx/3.0)^2) / σh)
     T_WENOZ_EU               = zeros(DatType, ncx + 6, 1)
@@ -344,7 +345,7 @@ end
     f_WENO                   = [0.0, 0.0, 0.0, 0.0, 0.0]
     w_WENO                   = zeros(DatType, 1, 3)
     d_WENO                   = [0.1, 0.6, 0.3]
-    λ_WENO                   = dx / 2.0
+    λ_WENO                   = (dx / 2.0)
 
     # Visualize initial configuration
     f = Figure()
@@ -361,7 +362,7 @@ end
     # Time loop
     for idx_t in 1:nt
         # Euler
-        advect_upwind!(T_EU, ∂T∂t_a, vx, _dx)
+        advect_upwind!(T_EU, ∂T∂t_a, Vx, _dx)
         update_T_Euler!(T_EU, ∂T∂t_a, dt)
 
         # BC - Periodic
@@ -372,10 +373,10 @@ end
         ∂T∂t_aRK2 .= 0.0
         ∂T∂t_aRK3 .= 0.0
         ∂T∂t_aRK4 .= 0.0
-        advect_upwind!(T_RK, ∂T∂t_aRK1, vx, _dx)
-        advect_upwind!(T_RK .+ 0.5.*dt.*∂T∂t_aRK1, ∂T∂t_aRK2, vx, _dx)
-        advect_upwind!(T_RK .+ 0.5.*dt.*∂T∂t_aRK2, ∂T∂t_aRK3, vx, _dx)
-        advect_upwind!(T_RK .+      dt.*∂T∂t_aRK3, ∂T∂t_aRK4, vx, _dx)
+        advect_upwind!(T_RK, ∂T∂t_aRK1, Vx, _dx)
+        advect_upwind!(T_RK .+ 0.5.*dt.*∂T∂t_aRK1, ∂T∂t_aRK2, Vx, _dx)
+        advect_upwind!(T_RK .+ 0.5.*dt.*∂T∂t_aRK2, ∂T∂t_aRK3, Vx, _dx)
+        advect_upwind!(T_RK .+      dt.*∂T∂t_aRK3, ∂T∂t_aRK4, Vx, _dx)
         update_T_RK4!(T_RK, ∂T∂t_aRK1, ∂T∂t_aRK2, ∂T∂t_aRK3, ∂T∂t_aRK4,dt)
 
         # BC - Periodic
@@ -386,30 +387,37 @@ end
         ∂T∂t_aWRK2 .= 0.0
         ∂T∂t_aWRK3 .= 0.0
         ∂T∂t_aWRK4 .= 0.0
+
+        # BC handling
+        T_WENOZ_RK[1:3, 1]       .= T_WENOZ_RK[end-5:end-3, 1]
+        T_WENOZ_RK[end-2:end, 1] .= T_WENOZ_RK[4:6, 1]
+        vx[1:3, 1]       .= vx[end-5:end-3, 1]
+        vx[end-2:end, 1] .= vx[4:6, 1]
+
         advect_WENOZ!(T_WENOZ_RK,                         qTa_WENO, ∂T∂t_aWRK1, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, _dx)
         advect_WENOZ!(T_WENOZ_RK .+ 0.5.*dt.*∂T∂t_aWRK1,  qTa_WENO, ∂T∂t_aWRK2, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, _dx)
         advect_WENOZ!(T_WENOZ_RK .+ 0.5.*dt.*∂T∂t_aWRK2,  qTa_WENO, ∂T∂t_aWRK3, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, _dx)
         advect_WENOZ!(T_WENOZ_RK .+      dt.*∂T∂t_aWRK3,  qTa_WENO, ∂T∂t_aWRK4, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, _dx)
         update_T_RK4_WENO!(T_WENOZ_RK, ∂T∂t_aWRK1, ∂T∂t_aWRK2, ∂T∂t_aWRK3, ∂T∂t_aWRK4, dt)
 
-        # BC handling
-        T_WENOZ_RK[1:3, 1]       .= T_WENOZ_RK[end-5:end-3, 1]
-        T_WENOZ_RK[end-2:end, 1] .= T_WENOZ_RK[4:6, 1]
-
         # WENO-Z+ - RK4 update
         ∂T∂t_aWRK1 .= 0.0
         ∂T∂t_aWRK2 .= 0.0
         ∂T∂t_aWRK3 .= 0.0
         ∂T∂t_aWRK4 .= 0.0
+
+        # BC handling
+        T_WENOZp_RK[1:3, 1]       .= T_WENOZp_RK[end-5:end-3, 1]
+        T_WENOZp_RK[end-2:end, 1] .= T_WENOZp_RK[4:6, 1]
+        vx[1:3, 1]       .= vx[end-5:end-3, 1]
+        vx[end-2:end, 1] .= vx[4:6, 1]
+
+        # Construct ΔTs
         advect_WENOZ_plus!(T_WENOZp_RK,                         qTa_WENO, ∂T∂t_aWRK1, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, _dx, λ_WENO)
         advect_WENOZ_plus!(T_WENOZp_RK .+ 0.5.*dt.*∂T∂t_aWRK1,  qTa_WENO, ∂T∂t_aWRK2, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, _dx, λ_WENO)
         advect_WENOZ_plus!(T_WENOZp_RK .+ 0.5.*dt.*∂T∂t_aWRK2,  qTa_WENO, ∂T∂t_aWRK3, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, _dx, λ_WENO)
         advect_WENOZ_plus!(T_WENOZp_RK .+      dt.*∂T∂t_aWRK3,  qTa_WENO, ∂T∂t_aWRK4, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, _dx, λ_WENO)
         update_T_RK4_WENO!(T_WENOZp_RK, ∂T∂t_aWRK1, ∂T∂t_aWRK2, ∂T∂t_aWRK3, ∂T∂t_aWRK4, dt)
-
-        # BC handling
-        T_WENOZp_RK[1:3, 1]       .= T_WENOZp_RK[end-5:end-3, 1]
-        T_WENOZp_RK[end-2:end, 1] .= T_WENOZp_RK[4:6, 1]
 
         # Update visualization
         if idx_t % nviz == 0
