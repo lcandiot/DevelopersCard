@@ -1,5 +1,5 @@
 # This script showcases standard 1st order upwind advection and compare Runge-Kutta methods with Euler time integration
-using CairoMakie, MathTeXEngine
+using CairoMakie, MathTeXEngine, Printf
 
 # Set constants
 const ϵ = 1e-10
@@ -295,7 +295,9 @@ function update_T_RK4_WENO!(
 end
 
 # Define main function
-@views function run_main()
+@views function run_main(;
+    printfig :: Bool = false
+    )
 
     # Physics
     Lx   = 20.0
@@ -313,7 +315,7 @@ end
     dt_d = dx^2 / k  / 2.1
     dt_a = dx   / abs(Vx) / 2.1
     dt   = CFL * min(dt_d, dt_a)
-    nviz = 10
+    nviz = 100
 
     # Initialize
     xc                       = collect(LinRange((-Lx+dx)/2.0, (Lx-dx)/2.0, ncx))
@@ -427,6 +429,10 @@ end
             sc2[1][] .= [[pt[1], T_WENOZp_RK[i+3]] for (i, pt) in enumerate(sc2[1][])]
             ln3[1][] .= [[pt[1], T_WENOZp_RK[i+3]] for (i, pt) in enumerate(ln3[1][])]
             display(f)
+            if printfig
+                fname = @sprintf "./png/updwind_vs_WENO_1D_%06d.png" idx_t
+                save(fname, f, px_per_unit = 4)
+            end
         end
 
     end
@@ -438,4 +444,4 @@ end
 
 # -----------------------------------------------------------------
 # Run main function
-ln = run_main();
+ln = run_main(; printfig = true);

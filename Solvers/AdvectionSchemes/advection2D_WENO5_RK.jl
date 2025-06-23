@@ -25,8 +25,6 @@ end
 
 function advect_WENOZ_plus!(
     T      :: AbstractArray,
-    vxT    :: Matrix{DatType},
-    vyT    :: Matrix{DatType},
     qTxa   :: Matrix{DatType},
     qTya   :: Matrix{DatType},
     ∂T∂t_a :: Matrix{DatType},
@@ -46,147 +44,122 @@ function advect_WENOZ_plus!(
     ∂T∂t_a .= 0.0
     qTxa   .= 0.0
     qTya   .= 0.0
-    vxT    .= 0.0
-    vyT    .= 0.0
 
-    # Assemble the fluxes vx*T , vy*T
-    for idx_y in axes(vxT,2)
-        for idx_x in axes(vxT, 1)
-            if idx_x > 3 && idx_x < size(vxT, 1) - 2
-                vx[idx_x - 3, idx_y] > 0.0 ? vxT[idx_x, idx_y] = vx[idx_x - 3, idx_y] * T[idx_x - 1, idx_y + 3] : vxT[idx_x, idx_y] = vx[idx_x - 3, idx_y] * T[idx_x, idx_y + 3]
-            end
-        end
-    end
-    for idx_y in axes(vyT,2)
-        for idx_x in axes(vyT, 1)
-            if idx_y > 3 && idx_y < size(vyT, 2) - 2
-                vy[idx_x, idx_y - 3] > 0.0 ? vyT[idx_x, idx_y] = vy[idx_x, idx_y - 3] * T[idx_x + 3, idx_y - 1] : vyT[idx_x, idx_y] = vy[idx_x, idx_y - 3] * T[idx_x + 3, idx_y]
-            end
-        end
-    end
+    # Reconstruct flux in x
+    for idx_y in axes(qTxa, 2)
+        for idx_x in axes(qTxa, 1)
+            # Left-biased stencil - positive flow direction
+            f[1], f[2], f[3], f[4], f[5] = T[idx_x, idx_y + 3], T[idx_x + 1, idx_y + 3], T[idx_x + 2, idx_y + 3], T[idx_x + 3, idx_y + 3], T[idx_x + 4, idx_y + 3]
 
-    for idx_y in axes(vxT, 2)
-        for idx_x in axes(vxT, 1)
-            if idx_x > 3 && idx_x < size(vxT, 1) - 2
-                # Left-biased stencil - positive flow direction
-                f[1], f[2], f[3], f[4], f[5] = vxT[idx_x - 3, idx_y], vxT[idx_x - 2, idx_y], vxT[idx_x - 1, idx_y], vxT[idx_x, idx_y], vxT[idx_x + 1, idx_y]
+            # Flux reconstructions
+            q[1, 1] = ( 2.0 * f[1] - 7.0 * f[2] + 11.0 * f[3]) / 6.0
+            q[2, 1] = (-1.0 * f[2] + 5.0 * f[3] +  2.0 * f[4]) / 6.0
+            q[3, 1] = ( 2.0 * f[3] + 5.0 * f[4] -  1.0 * f[5]) / 6.0
 
-                # Flux reconstructions
-                q[1, 1] = ( 2.0 * f[1] - 7.0 * f[2] + 11.0 * f[3]) / 6.0
-                q[2, 1] = (-1.0 * f[2] + 5.0 * f[3] +  2.0 * f[4]) / 6.0
-                q[3, 1] = ( 2.0 * f[3] + 5.0 * f[4] -  1.0 * f[5]) / 6.0
+            # Smoothness indicators
+            β[1] = (13.0 / 12.0) * (f[1] - 2.0 * f[2] + f[3])^2 + 0.25 * (f[1] - 4.0 * f[2] + 3.0 * f[3])^2
+            β[2] = (13.0 / 12.0) * (f[2] - 2.0 * f[3] + f[4])^2 + 0.25 * (f[2] - f[4])^2
+            β[3] = (13.0 / 12.0) * (f[3] - 2.0 * f[4] + f[5])^2 + 0.25 * (3.0 * f[3] - 4.0 * f[4] + f[5])^2
 
-                # Smoothness indicators
-                β[1] = (13.0 / 12.0) * (f[1] - 2.0 * f[2] + f[3])^2 + 0.25 * (f[1] - 4.0 * f[2] + 3.0 * f[3])^2
-                β[2] = (13.0 / 12.0) * (f[2] - 2.0 * f[3] + f[4])^2 + 0.25 * (f[2] - f[4])^2
-                β[3] = (13.0 / 12.0) * (f[3] - 2.0 * f[4] + f[5])^2 + 0.25 * (3.0 * f[3] - 4.0 * f[4] + f[5])^2
+            # Global smoothness indicator
+            τ5 = abs(β[1] - β[3])
 
-                # Global smoothness indicator
-                τ5 = abs(β[1] - β[3])
+            # Nonlinear weights
+            α[1]     = d[1] * (1.0 + (τ5 / (β[1] + ϵ))^2 + λ * (β[1] + ϵ) / (τ5 + ϵ))
+            α[2]     = d[2] * (1.0 + (τ5 / (β[2] + ϵ))^2 + λ * (β[2] + ϵ) / (τ5 + ϵ))
+            α[3]     = d[3] * (1.0 + (τ5 / (β[3] + ϵ))^2 + λ * (β[3] + ϵ) / (τ5 + ϵ))
+            w[1, :] .= (α ./ sum(α))
 
-                # Nonlinear weights
-                α[1]     = d[1] * (1.0 + (τ5 / (β[1] + ϵ))^2 + λ * (β[1] + ϵ) / (τ5 + ϵ))
-                α[2]     = d[2] * (1.0 + (τ5 / (β[2] + ϵ))^2 + λ * (β[2] + ϵ) / (τ5 + ϵ))
-                α[3]     = d[3] * (1.0 + (τ5 / (β[3] + ϵ))^2 + λ * (β[3] + ϵ) / (τ5 + ϵ))
-                w[1, :] .= (α ./ sum(α))
+            # Add to advective term
+            qTxa[idx_x, idx_y] += max(0.0, vx[idx_x + 3, idx_y]) * (w * q)[1]
 
-                # Add to advective term
-                qTxa[idx_x - 3, idx_y] += (w * q)[1]
+            # Right-biased stencil - negative flow direction
+            f[1], f[2], f[3], f[4], f[5] = T[idx_x + 5, idx_y + 3], T[idx_x + 4, idx_y + 3], T[idx_x + 3, idx_y + 3], T[idx_x + 2, idx_y + 3], T[idx_x + 1, idx_y + 3]
+            
+            # Flux reconstructions
+            q[1, 1] = ( 2.0 * f[1] - 7.0 * f[2] + 11.0 * f[3]) / 6.0
+            q[2, 1] = (-1.0 * f[2] + 5.0 * f[3] +  2.0 * f[4]) / 6.0
+            q[3, 1] = ( 2.0 * f[3] + 5.0 * f[4] -  1.0 * f[5]) / 6.0
 
-                # Right-biased stencil - negative flow direction
-                f[1], f[2], f[3], f[4], f[5] = vxT[idx_x + 3, idx_y], vxT[idx_x + 2, idx_y], vxT[idx_x + 1, idx_y], vxT[idx_x, idx_y], vxT[idx_x - 1, idx_y]
-                
-                # Flux reconstructions
-                q[1, 1] = ( 2.0 * f[1] - 7.0 * f[2] + 11.0 * f[3]) / 6.0
-                q[2, 1] = (-1.0 * f[2] + 5.0 * f[3] +  2.0 * f[4]) / 6.0
-                q[3, 1] = ( 2.0 * f[3] + 5.0 * f[4] -  1.0 * f[5]) / 6.0
+            # Smoothness indicators
+            β[1] = (13.0 / 12.0) * (f[1] - 2.0 * f[2] + f[3])^2 + 0.25 * (f[1] - 4.0 * f[2] + 3.0 * f[3])^2
+            β[2] = (13.0 / 12.0) * (f[2] - 2.0 * f[3] + f[4])^2 + 0.25 * (f[2] - f[4])^2
+            β[3] = (13.0 / 12.0) * (f[3] - 2.0 * f[4] + f[5])^2 + 0.25 * (3.0 * f[3] - 4.0 * f[4] + f[5])^2
 
-                # Smoothness indicators
-                β[1] = (13.0 / 12.0) * (f[1] - 2.0 * f[2] + f[3])^2 + 0.25 * (f[1] - 4.0 * f[2] + 3.0 * f[3])^2
-                β[2] = (13.0 / 12.0) * (f[2] - 2.0 * f[3] + f[4])^2 + 0.25 * (f[2] - f[4])^2
-                β[3] = (13.0 / 12.0) * (f[3] - 2.0 * f[4] + f[5])^2 + 0.25 * (3.0 * f[3] - 4.0 * f[4] + f[5])^2
+            # Global smoothness indicator
+            τ5 = abs(β[1] - β[3])
 
-                # Global smoothness indicator
-                τ5 = abs(β[1] - β[3])
+            # Nonlinear weights
+            α[1]     = d[1] * (1.0 + (τ5 / (β[1] + ϵ))^2 + λ * (β[1] + ϵ) / (τ5 + ϵ))
+            α[2]     = d[2] * (1.0 + (τ5 / (β[2] + ϵ))^2 + λ * (β[2] + ϵ) / (τ5 + ϵ))
+            α[3]     = d[3] * (1.0 + (τ5 / (β[3] + ϵ))^2 + λ * (β[3] + ϵ) / (τ5 + ϵ))
+            w[1, :] .= (α ./ sum(α))
 
-                # Nonlinear weights
-                α[1]     = d[1] * (1.0 + (τ5 / (β[1] + ϵ))^2)
-                α[2]     = d[2] * (1.0 + (τ5 / (β[2] + ϵ))^2)
-                α[3]     = d[3] * (1.0 + (τ5 / (β[3] + ϵ))^2)
-                w[1, :] .= (α ./ sum(α))
-
-                # Add to advective term
-                qTxa[idx_x - 2, idx_y] += (w * q)[1]
-            end
-        end
-    end
-    for idx_y in axes(vyT, 2)
-        for idx_x in axes(vyT, 1)
-            if idx_y > 3 && idx_y < size(vyT, 2) - 2
-                # Left-biased stencil - positive flow direction
-                f[1], f[2], f[3], f[4], f[5] = vyT[idx_x, idx_y - 3], vyT[idx_x, idx_y - 2], vyT[idx_x, idx_y - 1], vyT[idx_x, idx_y], vyT[idx_x, idx_y + 1]
-
-                # Flux reconstructions
-                q[1, 1] = ( 2.0 * f[1] - 7.0 * f[2] + 11.0 * f[3]) / 6.0
-                q[2, 1] = (-1.0 * f[2] + 5.0 * f[3] +  2.0 * f[4]) / 6.0
-                q[3, 1] = ( 2.0 * f[3] + 5.0 * f[4] -  1.0 * f[5]) / 6.0
-
-                # Smoothness indicators
-                β[1] = (13.0 / 12.0) * (f[1] - 2.0 * f[2] + f[3])^2 + 0.25 * (f[1] - 4.0 * f[2] + 3.0 * f[3])^2
-                β[2] = (13.0 / 12.0) * (f[2] - 2.0 * f[3] + f[4])^2 + 0.25 * (f[2] - f[4])^2
-                β[3] = (13.0 / 12.0) * (f[3] - 2.0 * f[4] + f[5])^2 + 0.25 * (3.0 * f[3] - 4.0 * f[4] + f[5])^2
-
-                # Global smoothness indicator
-                τ5 = abs(β[1] - β[3])
-
-                # Nonlinear weights
-                α[1]     = d[1] * (1.0 + (τ5 / (β[1] + ϵ))^2 + λ * (β[1] + ϵ) / (τ5 + ϵ))
-                α[2]     = d[2] * (1.0 + (τ5 / (β[2] + ϵ))^2 + λ * (β[2] + ϵ) / (τ5 + ϵ))
-                α[3]     = d[3] * (1.0 + (τ5 / (β[3] + ϵ))^2 + λ * (β[3] + ϵ) / (τ5 + ϵ))
-                w[1, :] .= (α ./ sum(α))
-
-                # Add to advective term
-                qTya[idx_x, idx_y - 3] += (w * q)[1]
-
-                # Right-biased stencil - negative flow direction
-                f[1], f[2], f[3], f[4], f[5] = vyT[idx_x, idx_y + 3], vyT[idx_x, idx_y + 2], vyT[idx_x, idx_y + 1], vyT[idx_x, idx_y], vyT[idx_x, idx_y - 1]
-                
-                # Flux reconstructions
-                q[1, 1] = ( 2.0 * f[1] - 7.0 * f[2] + 11.0 * f[3]) / 6.0
-                q[2, 1] = (-1.0 * f[2] + 5.0 * f[3] +  2.0 * f[4]) / 6.0
-                q[3, 1] = ( 2.0 * f[3] + 5.0 * f[4] -  1.0 * f[5]) / 6.0
-
-                # Smoothness indicators
-                β[1] = (13.0 / 12.0) * (f[1] - 2.0 * f[2] + f[3])^2 + 0.25 * (f[1] - 4.0 * f[2] + 3.0 * f[3])^2
-                β[2] = (13.0 / 12.0) * (f[2] - 2.0 * f[3] + f[4])^2 + 0.25 * (f[2] - f[4])^2
-                β[3] = (13.0 / 12.0) * (f[3] - 2.0 * f[4] + f[5])^2 + 0.25 * (3.0 * f[3] - 4.0 * f[4] + f[5])^2
-
-                # Global smoothness indicator
-                τ5 = abs(β[1] - β[3])
-
-                # Nonlinear weights
-                α[1]     = d[1] * (1.0 + (τ5 / (β[1] + ϵ))^2 + λ * (β[1] + ϵ) / (τ5 + ϵ))
-                α[2]     = d[2] * (1.0 + (τ5 / (β[2] + ϵ))^2 + λ * (β[2] + ϵ) / (τ5 + ϵ))
-                α[3]     = d[3] * (1.0 + (τ5 / (β[3] + ϵ))^2 + λ * (β[3] + ϵ) / (τ5 + ϵ))
-                w[1, :] .= (α ./ sum(α))
-
-                # Add to advective term
-                qTya[idx_x, idx_y - 2] += (w * q)[1]
-            end
+            # Add to advective term
+            qTxa[idx_x, idx_y] += min(vx[idx_x + 3, idx_y], 0.0) * (w * q)[1]
         end
     end
 
-    # BC - Periodic
-    qTxa[1, :]      .= qTxa[end-1, :]  # wrap last interface to start
-    qTxa[end, :]    .= qTxa[2, :]      # wrap first real interface to end
-    qTya[:, 1]      .= qTya[:, end-1]  # wrap last interface to start
-    qTya[:, end]    .= qTya[:, 2]      # wrap first real interface to end
+    # Reconstruct flux in y
+    for idx_y in axes(qTya, 2)
+        for idx_x in axes(qTya, 1)
+            # Left-biased stencil - positive flow direction
+            f[1], f[2], f[3], f[4], f[5] = T[idx_x + 3, idx_y], T[idx_x + 3, idx_y + 1], T[idx_x + 3, idx_y + 2], T[idx_x + 3, idx_y + 3], T[idx_x + 3, idx_y + 4]
 
-    # Compute advective change
+            # Flux reconstructions
+            q[1, 1] = ( 2.0 * f[1] - 7.0 * f[2] + 11.0 * f[3]) / 6.0
+            q[2, 1] = (-1.0 * f[2] + 5.0 * f[3] +  2.0 * f[4]) / 6.0
+            q[3, 1] = ( 2.0 * f[3] + 5.0 * f[4] -  1.0 * f[5]) / 6.0
+
+            # Smoothness indicators
+            β[1] = (13.0 / 12.0) * (f[1] - 2.0 * f[2] + f[3])^2 + 0.25 * (f[1] - 4.0 * f[2] + 3.0 * f[3])^2
+            β[2] = (13.0 / 12.0) * (f[2] - 2.0 * f[3] + f[4])^2 + 0.25 * (f[2] - f[4])^2
+            β[3] = (13.0 / 12.0) * (f[3] - 2.0 * f[4] + f[5])^2 + 0.25 * (3.0 * f[3] - 4.0 * f[4] + f[5])^2
+
+            # Global smoothness indicator
+            τ5 = abs(β[1] - β[3])
+
+            # Nonlinear weights
+            α[1]     = d[1] * (1.0 + (τ5 / (β[1] + ϵ))^2 + λ * (β[1] + ϵ) / (τ5 + ϵ))
+            α[2]     = d[2] * (1.0 + (τ5 / (β[2] + ϵ))^2 + λ * (β[2] + ϵ) / (τ5 + ϵ))
+            α[3]     = d[3] * (1.0 + (τ5 / (β[3] + ϵ))^2 + λ * (β[3] + ϵ) / (τ5 + ϵ))
+            w[1, :] .= (α ./ sum(α))
+
+            # Add to advective term
+            qTya[idx_x, idx_y] += max(0.0, vy[idx_x, idx_y + 3]) * (w * q)[1]
+
+            # Right-biased stencil - negative flow direction
+            f[1], f[2], f[3], f[4], f[5] = T[idx_x + 3, idx_y + 5], T[idx_x + 3, idx_y + 4], T[idx_x + 3, idx_y + 3], T[idx_x + 3, idx_y + 2], T[idx_x + 3, idx_y + 1]
+            
+            # Flux reconstructions
+            q[1, 1] = ( 2.0 * f[1] - 7.0 * f[2] + 11.0 * f[3]) / 6.0
+            q[2, 1] = (-1.0 * f[2] + 5.0 * f[3] +  2.0 * f[4]) / 6.0
+            q[3, 1] = ( 2.0 * f[3] + 5.0 * f[4] -  1.0 * f[5]) / 6.0
+
+            # Smoothness indicators
+            β[1] = (13.0 / 12.0) * (f[1] - 2.0 * f[2] + f[3])^2 + 0.25 * (f[1] - 4.0 * f[2] + 3.0 * f[3])^2
+            β[2] = (13.0 / 12.0) * (f[2] - 2.0 * f[3] + f[4])^2 + 0.25 * (f[2] - f[4])^2
+            β[3] = (13.0 / 12.0) * (f[3] - 2.0 * f[4] + f[5])^2 + 0.25 * (3.0 * f[3] - 4.0 * f[4] + f[5])^2
+
+            # Global smoothness indicator
+            τ5 = abs(β[1] - β[3])
+
+            # Nonlinear weights
+            α[1]     = d[1] * (1.0 + (τ5 / (β[1] + ϵ))^2 + λ * (β[1] + ϵ) / (τ5 + ϵ))
+            α[2]     = d[2] * (1.0 + (τ5 / (β[2] + ϵ))^2 + λ * (β[2] + ϵ) / (τ5 + ϵ))
+            α[3]     = d[3] * (1.0 + (τ5 / (β[3] + ϵ))^2 + λ * (β[3] + ϵ) / (τ5 + ϵ))
+            w[1, :] .= (α ./ sum(α))
+
+            # Add to advective term
+            qTya[idx_x, idx_y] += min(vy[idx_x, idx_y + 3], 0.0) * (w * q)[1]
+        end
+    end
+
+    # Compute temperature increment per time step
     for idx_y in axes(∂T∂t_a, 2)
         for idx_x in axes(∂T∂t_a, 1)
             if idx_x > 3 && idx_x < size(∂T∂t_a, 1) - 2 && idx_y > 3 && idx_y < size(∂T∂t_a, 2) - 2
-                ∂T∂t_a[idx_x, idx_y] = -(qTxa[idx_x - 1, idx_y - 3] - qTxa[idx_x - 2, idx_y - 3]) * _dx -(qTya[idx_x - 3, idx_y - 1] - qTya[idx_x - 3, idx_y - 2]) * _dy
+                ∂T∂t_a[idx_x, idx_y] = -(qTxa[idx_x - 2, idx_y - 3] - qTxa[idx_x - 3, idx_y - 3]) * _dx - (qTya[idx_x - 3, idx_y - 2] - qTya[idx_x - 3, idx_y - 3]) * _dy
             end
         end
     end
@@ -231,15 +204,13 @@ end
     ω    = 1.0
 
     # Numerics
-    ncx, ncy  = 101, 51
-    nt   = 200
+    ncx, ncy  = 101, 101
+    nt   = 4_000
     dx   = Lx / ncx
     dy   = Ly / ncy
     _dx  = 1.0 / dx
     _dy  = 1.0 / dy
-    CFL  = 0.4
-    dt_d = 1.0 #min(dx^2, dy^2) / k  / 4.1
-    nviz = 10
+    nviz = 200
 
     # Initialize
     xc                       = collect(LinRange((-Lx+dx)/2.0, (Lx-dx)/2.0, ncx  ))
@@ -255,31 +226,47 @@ end
     T_WENOZp_RK = deepcopy(T_ini)
     qTxa_WENO   = zeros(DatType, ncx + 1, ncy    )
     qTya_WENO   = zeros(DatType, ncx    , ncy + 1)
-    vxT         = zeros(DatType, ncx + 7, ncy)
-    vyT         = zeros(DatType, ncx    , ncy + 7)
     ∂T∂t_aWRK1  = zeros(DatType, ncx + 6, ncy + 6)
     ∂T∂t_aWRK2  = zeros(DatType, ncx + 6, ncy + 6)
     ∂T∂t_aWRK3  = zeros(DatType, ncx + 6, ncy + 6)
     ∂T∂t_aWRK4  = zeros(DatType, ncx + 6, ncy + 6)
-    vx          = zeros(DatType, ncx + 1, ncy    )
-    vy          = zeros(DatType, ncx    , ncy + 1)
+
+    # Velocity fields
+    vx          = zeros(DatType, ncx + 7, ncy    )
+    vy          = zeros(DatType, ncx    , ncy + 7)
     for idx_y in axes(vx, 2)
         for idx_x in axes(vx, 1)
-            vx[idx_x, idx_y] = -ω * yv[idx_y] * Vx
+            if idx_x > 3 && idx_x < size(vx, 1) -2
+                vx[idx_x, idx_y] = -ω * yv[idx_y] * Vx
+            end
         end
     end
     for idx_y in axes(vy, 2)
         for idx_x in axes(vy, 1)
-            vy[idx_x, idx_y] =  ω * xv[idx_x] * Vy
+            if idx_y > 3 && idx_y < size(vy, 2) -2
+                vy[idx_x, idx_y] =  ω * xv[idx_x] * Vy
+            end
         end
     end
+
+    # Ghost nodes
+    vx[1:3,       :] .= vx[end-5:end-3, :]
+    vx[end-2:end, :] .= vx[4:6,         :]
+    vy[:,       1:3] .= vy[:, end-5:end-3]
+    vy[:, end-2:end] .= vy[:,         4:6]
+
+    # WENO arrays
     α_WENO                   = [0.0, 0.0, 0.0]
     β_WENO                   = [0.0, 0.0, 0.0]
     q_WENO                   = zeros(DatType, 3, 1)
     f_WENO                   = [0.0, 0.0, 0.0, 0.0, 0.0]
     w_WENO                   = zeros(DatType, 1, 3)
     d_WENO                   = [0.1, 0.6, 0.3]
-    λ_WENO                   = 0.0
+    λ_WENO                   = min(dx, dx) / 2.0
+
+    # Explicit time steps
+    CFL  = 0.4
+    dt_d = 1.0 #min(dx^2, dy^2) / k  / 4.1
     dt_a = min(dx,   dy  ) / max(abs(maximum(vx)), abs(maximum(vy))) / 4.1
     dt   = CFL * min(dt_d, dt_a)
 
@@ -304,15 +291,19 @@ end
         ∂T∂t_aWRK2 .= 0.0
         ∂T∂t_aWRK3 .= 0.0
         ∂T∂t_aWRK4 .= 0.0
-        advect_WENOZ_plus!(T_WENOZp_RK,                        vxT, vyT, qTxa_WENO, qTya_WENO, ∂T∂t_aWRK1, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, vy, _dx, _dy, λ_WENO)
-        advect_WENOZ_plus!(T_WENOZp_RK .+ 0.5.*dt.*∂T∂t_aWRK1, vxT, vyT, qTxa_WENO, qTya_WENO, ∂T∂t_aWRK2, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, vy, _dx, _dy, λ_WENO)
-        advect_WENOZ_plus!(T_WENOZp_RK .+ 0.5.*dt.*∂T∂t_aWRK2, vxT, vyT, qTxa_WENO, qTya_WENO, ∂T∂t_aWRK3, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, vy, _dx, _dy, λ_WENO)
-        advect_WENOZ_plus!(T_WENOZp_RK .+      dt.*∂T∂t_aWRK3, vxT, vyT, qTxa_WENO, qTya_WENO, ∂T∂t_aWRK4, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, vy, _dx, _dy, λ_WENO)
+        advect_WENOZ_plus!(T_WENOZp_RK,                        qTxa_WENO, qTya_WENO, ∂T∂t_aWRK1, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, vy, _dx, _dy, λ_WENO)
+        advect_WENOZ_plus!(T_WENOZp_RK .+ 0.5.*dt.*∂T∂t_aWRK1, qTxa_WENO, qTya_WENO, ∂T∂t_aWRK2, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, vy, _dx, _dy, λ_WENO)
+        advect_WENOZ_plus!(T_WENOZp_RK .+ 0.5.*dt.*∂T∂t_aWRK2, qTxa_WENO, qTya_WENO, ∂T∂t_aWRK3, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, vy, _dx, _dy, λ_WENO)
+        advect_WENOZ_plus!(T_WENOZp_RK .+      dt.*∂T∂t_aWRK3, qTxa_WENO, qTya_WENO, ∂T∂t_aWRK4, α_WENO, β_WENO, d_WENO, q_WENO, f_WENO, w_WENO, vx, vy, _dx, _dy, λ_WENO)
         update_T_RK4_WENO!(T_WENOZp_RK, ∂T∂t_aWRK1, ∂T∂t_aWRK2, ∂T∂t_aWRK3, ∂T∂t_aWRK4, dt)
 
         # BC handling
-        # T_WENOZp_RK[1:3, 1]       .= T_WENOZp_RK[end-5:end-3, 1]
-        # T_WENOZp_RK[end-2:end, 1] .= T_WENOZp_RK[4:6, 1]
+        T_WENOZp_RK[1:3,       1] .= T_WENOZp_RK[end-5:end-3, 1]
+        T_WENOZp_RK[end-2:end, 1] .= T_WENOZp_RK[4:6,         1]
+        vx[1:3,       :]          .= vx[end-5:end-3, :]
+        vx[end-2:end, :]          .= vx[4:6,         :]
+        vy[:,       1:3]          .= vy[:, end-5:end-3]
+        vy[:, end-2:end]          .= vy[:,         4:6]
 
         # Update visualization
         if idx_t % nviz == 0
