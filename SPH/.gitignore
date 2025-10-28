@@ -1,0 +1,5 @@
+# Ignore figure directory
+/png
+
+# DS Store
+/.DS_Store
