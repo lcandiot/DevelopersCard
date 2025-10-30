@@ -513,22 +513,22 @@ function compute_viscousterm_acceleration!(
                 ρj = particles.ρ[j]
 
                 if particles.wall_flag[j] == 0 # if neighbour particle is wall ...
-                    vx_pj, vy_pj = 0.0, 0.0
-                    if particles.wall_position[j] == -1
-                        dp = abs(0.0 - yp)
-                        dj = abs(0.0 - yj)
-                        β = min(1.5, dj/dp)
-                        vx_pj = β * vxp
-                        vy_pj = β * vyp
-                    elseif particles.wall_position[j] == 1
-                        dp = abs(params.Ly - yp)
-                        dj = abs(params.Ly - yj)
-                        β = min(1.5, dj/dp)
-                        vx_pj = β * vxp
-                        vy_pj = β * vyp
-                    end
-                    vxj = -vx_pj
-                    vyj = -vy_pj
+                    # vx_pj, vy_pj = 0.0, 0.0
+                    # if particles.wall_position[j] == -1
+                    #     dp = abs(0.0 - yp)
+                    #     dj = abs(0.0 - yj)
+                    #     β = min(1.5, dj/dp)
+                    #     vx_pj = -vxp
+                    #     vy_pj = -vyp
+                    # elseif particles.wall_position[j] == 1
+                    #     dp = abs(params.Ly - yp)
+                    #     dj = abs(params.Ly - yj)
+                    #     β = min(1.5, dj/dp)
+                    #     vx_pj = β * vxp
+                    #     vy_pj = β * vyp
+                    # end
+                    vxj = -vxp
+                    vyj = -vyp
                     ρj  = ρp
                 end
                 coeff_x = particles.m[j] * (params.ν * ρp + params.ν * ρj) / (r2 + η2) / (ρp * ρj)
@@ -636,7 +636,7 @@ function main_2D_poiseuille_flow()
     Δp     = DatType(2e-5)                      # Particle spacing [m]
     ρ0     = DatType(1000.0)                    # Density [kg/m3]
     ν      = DatType(1e-6)                      # Kinematic viscosity [m2/s]
-    a_BC   = DatType(1e-1)                       # Driving acceleration at the boundary [m/s2]
+    a_BC   = DatType(1e-2)                       # Driving acceleration at the boundary [m/s2]
     γ_Tait = DatType(7.0)                       # EOS for pressure calculation [-]
     c0     = DatType(30.0)                       # artificial speed of sound [m/s]
     nt     = 1_000_000                                # Number of time steps
@@ -671,18 +671,19 @@ function main_2D_poiseuille_flow()
     u_max = a_BC * Ly^2 / 8.0 / ν
     
     # Initialize figure
-    idxF = particles.idx_fluid
+    idxF = particles.idx_fluid[1:1:end]
     tname = @sprintf "Time: %.5f s" time
-    f   = Figure(size = (1000, 400), fontsize = 18)
+    f   = Figure(size = (750, 300), fontsize = 15)
     ax1 = Axis(f[1,1][1,1], limits = (0.0, params.Lx, 0.0, params.Ly), xlabel = L"$x$ [m]", ylabel =L"$y$ [m]", aspect = 1.0, title = tname)
     ax2 = Axis(f[1,2], xlabel = L"$y$ [m]", ylabel = L"$u_x$ [m.s$^{-1}$]", aspect = 1.0, limits = (0.0, Ly, 0.0, u_max))
-    sc1 = scatter!(ax1, particles.x[idxF], particles.y[idxF], color = particles.vx[idxF], colormap=:batlow, colorrange = (0.0, u_max))
+    sc1 = scatter!(ax1, particles.x[idxF], particles.y[idxF], color = particles.vx[idxF], colormap=:batlow, colorrange = (0.0, u_max), markersize = 4)
     sc2 = scatter!(ax2, ys, u_sph, label = L"$$SPH")
     ln1 = lines!(ax2, ys, u_ana, color = :goldenrod, linewidth = 3, label = L"$$Analytical")
     cb  = Colorbar(f[1,1][1,2], sc1, tellheight = false, label = L"$u_x$ [m.s$^{-1}$]")
-    axislegend(ax2, labelsize = 11)
+    axislegend(ax2, labelsize = 11, backgroundcolor = (:white, 0.0))
     display(f)
 
+    # Interpolation settings - to get the Poiseuille parabola
     nsample   = 50
     u_sph_mat = Matrix{Float64}(undef, size(ys, 1), nsample)
     dx_spl = params.Lx / (nsample - 1)
@@ -737,7 +738,7 @@ function main_2D_poiseuille_flow()
             sc1.color = particles.vx[idxF]
             ax1.title = @sprintf "Time: %.5f s" time
             display(f)
-            
+
             # Save the figure
             fname = @sprintf "./png/2D_poiseuille_%05d.png" itime
             save(fname, f, px_per_unit = 4)
