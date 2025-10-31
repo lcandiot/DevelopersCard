@@ -132,6 +132,7 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
 
     # Smooth out the inclusion
     smooth_2DArray_diffusion!(ηs, 10, dx, dy)
+    compute_viscoelastic_rheology!(ηve, ηs, G, tsc)
 
     # Visualize
     fg1   = Figure(size = (1600, 1600))
@@ -141,10 +142,13 @@ macro av_yi(A) esc(:( ($A[idx + 1, idy] + $A[idx + 1, idy + 1]) * 0.5 )) end
     ax4   = Axis(fg1[1, 2], xlabel = "x", ylabel = "y", title = "ρ")
     ax5   = Axis(fg1[3, 1], xlabel = "nt", ylabel = "τII", title = "Stress build up")
     ax6   = Axis(fg1[3, 2], xlabel = "nt", ylabel = "τII", title = "∇v")
-    # hm1   = heatmap!(ax1, xc, yc, ηs)
+    hm1   = heatmap!(ax1, xc, yc, ηve)
+    cb1   = Colorbar(fg1[1,1][1,2], hm1)
     # hm2   = heatmap!(ax2, xv, yv, vx)
     # hm3   = heatmap!(ax3, xv, yv, vy)
-    # display(fg1)
+    display(fg1)
+
+    error("Hello")
 
     # TIME LOOP
     time = 0.0; τII_max_time = []; ntimes = []
@@ -259,7 +263,6 @@ function smooth_2DArray_diffusion!(A :: Matrix{Float64}, nsteps :: Int64, dx :: 
 
     # Return
     return nothing
-
 end
 
 # Divergence
